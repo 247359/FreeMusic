@@ -1,0 +1,18 @@
+<template>
+	<text v-if="props.tracks.length" class="selection-button" @click.stop="openTrackSelection(props.tracks)">多选</text>
+</template>
+
+<script setup>
+import { openTrackSelection } from '../common/actions.js'
+const props = defineProps({
+	tracks: { type: Array, default: () => [] }
+})
+</script>
+
+<style scoped>
+.selection-button {
+	padding: 8px;
+	font-size: 13px;
+	color: var(--primary);
+}
+</style>

@@ -1,0 +1,139 @@
+plugins {
+    alias(libs.plugins.android.application)
+    id 'io.dcloud.uts.kotlin'
+    id 'io.dcloud.uts.auto-register'
+}
+
+def projectManifest = new groovy.json.JsonSlurper().parse(rootProject.file('../uniapp/manifest.json'))
+def applicationPackage = projectManifest['app-android'].distribute.packageName
+def supportedAbis = projectManifest['app-android'].distribute.abiFilters
+def targetAbi = providers.gradleProperty('freemusic.abi').getOrElse('arm64-v8a')
+if (!supportedAbis.contains(targetAbi)) {
+    throw new GradleException("Unsupported ABI '${targetAbi}'. DCloud Vapor supports: ${supportedAbis.join(', ')}")
+}
+def pluginExports = rootProject.file('../uniapp/unpackage/resources/app-android/uni_modules')
+def nativePluginSources = [
+        'freemusic-media-volume',
+        'freemusic-compose-share',
+        'freemusic-release'
+].collect { name -> new File(pluginExports, "${name}/utssdk/app-android/src") }
+def githubRepository = providers.gradleProperty('freemusic.githubRepository')
+        .orElse(providers.environmentVariable('FREEMUSIC_GITHUB_REPOSITORY')).getOrElse('247359/FreeMusic')
+if (githubRepository && !(githubRepository ==~ /[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/)) {
+    throw new GradleException('GitHub repository must use owner/repo format.')
+}
+def signingFile = rootProject.file('../.signing/release.properties')
+def localSigning = new Properties()
+if (signingFile.isFile()) {
+    signingFile.withInputStream { localSigning.load(it) }
+}
+
+android {
+    namespace applicationPackage
+
+    compileSdk {
+        version = release(36)
+    }
+
+    defaultConfig {
+
+        applicationId applicationPackage
+        minSdk 24
+        targetSdk 36
+        versionCode projectManifest.versionCode.toInteger()
+        versionName projectManifest.versionName
+        manifestPlaceholders = [freeMusicAbi: targetAbi, freeMusicRepository: githubRepository]
+
+        ndk {
+            abiFilters targetAbi
+        }
+
+        android.buildFeatures.buildConfig true
+        buildConfigField 'String', 'UTSRegisterProviders', '"[]"'
+    }
+    if (signingFile.isFile()) {
+        signingConfigs {
+            release {
+                storeFile new File(signingFile.parentFile, localSigning.getProperty('storeFile'))
+                storePassword localSigning.getProperty('storePassword')
+                keyAlias localSigning.getProperty('keyAlias')
+                keyPassword localSigning.getProperty('keyPassword')
+            }
+        }
+        buildTypes {
+            release {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+    nativePluginSources.each { source -> sourceSets.main.kotlin.srcDir(source) }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    androidResources {
+        noCompress "uni-app-x-framework-vapor", "uni-app-x-framework-vapor-dev", "js"
+        ignoreAssetsPattern '!.svn:!.git:.*:!CVS:!thumbs.db:!picasa.ini:!*.scc:*~'
+    }
+
+    aaptOptions {
+        additionalParameters '--auto-add-overlay'
+        ignoreAssetsPattern '!.svn:!.git:.*:!CVS:!thumbs.db:!picasa.ini:!*.scc:*~'
+
+    }
+    packagingOptions {
+        pickFirst 'lib/*/libstlport_shared.so'
+        pickFirst 'lib/*/libc++_shared.so'
+
+        jniLibs {
+            useLegacyPackaging false
+        }
+    }
+}
+
+def verifyNativePluginExport = tasks.register('verifyNativePluginExport') {
+    doLast {
+        nativePluginSources.each { source ->
+            if (!new File(source, 'index.kt').isFile()) {
+                throw new GradleException("Missing UTS export for ${source.parentFile.parentFile.parentFile.name}. Export Android app resources from HBuilderX first.")
+            }
+        }
+    }
+}
+tasks.named('preBuild') { dependsOn verifyNativePluginExport }
+
+dependencies {
+    implementation project(':uniappx')
+
+    implementation "androidx.tracing:tracing-ktx:1.3.0"
+    // 后台音频服务 DCloudUniGetBackgroundAudioManager.AudioService 依赖 MediaSessionCompat
+    implementation "androidx.media:media:1.0.0"
+    implementation "androidx.core:core-ktx:1.10.1"
+    implementation "androidx.appcompat:appcompat:1.7.0"
+    implementation "androidx.constraintlayout:constraintlayout:2.2.1"
+    implementation "androidx.exifinterface:exifinterface:1.3.6"
+    implementation "com.google.android.material:material:1.10.0"
+
+    implementation "org.jetbrains.kotlin:kotlin-reflect:2.2.0"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+
+    implementation "com.facebook.fresco:fresco:3.4.0"
+    implementation "com.facebook.fresco:animated-base:3.4.0"
+    implementation "com.facebook.fresco:animated-gif:3.4.0"
+    implementation "com.facebook.fresco:animated-webp:3.4.0"
+    implementation "com.facebook.fresco:webpsupport:3.4.0"
+    implementation "com.facebook.fresco:imagepipeline:3.4.0"
+    implementation "com.facebook.fresco:drawee:3.4.0"
+    implementation "com.facebook.fresco:middleware:3.4.0"
+
+    implementation "com.caverock:androidsvg:1.4"
+    implementation "com.alibaba:fastjson:1.2.83"
+    implementation "com.github.getActivity:XXPermissions:18.63"
+    implementation "androidx.profileinstaller:profileinstaller:1.4.1"
+    implementation "com.squareup.okhttp3:okhttp:3.12.12"
+
+
+    implementation "com.google.android.exoplayer:exoplayer-core:2.18.0"
+    implementation rootProject.ext.uniAppSdk
+}

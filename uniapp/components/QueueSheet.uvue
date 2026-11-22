@@ -1,0 +1,157 @@
+<template>
+	<view v-if="props.show" class="mask" @click="emit('close')">
+		<view class="sheet" :class="themeClass" :style="{ paddingBottom: bottomInset }" @click.stop>
+			<view class="head">
+				<view class="head-title">
+					<text class="title">播放队列</text>
+					<text class="count">{{ player.queue.length }} 首</text>
+				</view>
+				<AppIcon name="x" :size="20" :opacity="0.6" @click="emit('close')" />
+			</view>
+			<scroll-view class="list" :show-scrollbar="false" scroll-y>
+				<view
+					v-for="(t, i) in player.queue"
+					:key="t.id + '-' + i"
+					class="row"
+					:class="{ current: i === player.index }"
+					@click="emit('play', i)"
+				>
+					<text class="name ellipsis" :class="{ 'current-name': i === player.index }">{{ t.name }}</text>
+					<text class="artist ellipsis">{{ t.artistName }}</text>
+					<view class="row-menu" @click.stop="editTrack(t, i)">
+						<AppIcon name="more" :size="19" :opacity="0.65" />
+					</view>
+				</view>
+				<view v-if="player.queue.length" class="queue-end">
+					<text class="queue-end-label">没有更多了</text>
+				</view>
+			</scroll-view>
+		</view>
+	</view>
+</template>
+
+<script setup>
+import AppIcon from './AppIcon.uvue'
+import { safeBottom } from '../common/config.js'
+import { player, themeState } from '../common/store.js'
+import { moveQueueTrack } from '../common/player.js'
+
+const props = defineProps({
+	show: { type: Boolean, default: false }
+})
+const emit = defineEmits(['close', 'play', 'remove'])
+
+const themeClass = computed(() => (themeState.isDark ? 'theme-dark' : 'theme-light'))
+const bottomInset = computed(() => 8 + safeBottom() + 'px')
+
+function editTrack(track, index) {
+	const options = []
+	if (index > 0) options.push({ label: '上移一位', delta: -1 })
+	if (index + 1 < player.queue.length) options.push({ label: '下移一位', delta: 1 })
+	options.push({ label: '移出队列', delta: 0 })
+	uni.showActionSheet({
+		itemList: options.map((option) => option.label),
+		success(result) {
+			const option = options[result.tapIndex]
+			if (!option || player.queue[index] !== track) return
+			if (option.delta) moveQueueTrack(index, index + option.delta)
+			else emit('remove', index)
+		}
+	})
+}
+</script>
+
+<style scoped>
+.queue-end {
+	align-items: center;
+	padding: 18px 0;
+}
+.queue-end-label {
+	font-size: 12px;
+	color: var(--text);
+	opacity: 0.5;
+}
+.mask {
+	position: fixed;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.42);
+	z-index: 300;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+}
+.sheet {
+	width: 100%;
+	max-height: 520px;
+	background-color: var(--bg);
+	border-radius: 18px 18px 0 0;
+	display: flex;
+	flex-direction: column;
+}
+.head {
+	height: 56px;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0 18px;
+}
+.head-title {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+.title {
+	font-size: 17px;
+	font-weight: 600;
+	color: var(--text);
+}
+.count {
+	font-size: 12px;
+	color: var(--text);
+	opacity: 0.58;
+	margin-left: 8px;
+}
+.list {
+	max-height: 420px;
+}
+.row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	height: 48px;
+	padding: 0 18px;
+}
+.row.current {
+	background-color: var(--secondary-bg-t);
+}
+.name {
+	flex: 1;
+	width: 0;
+	font-size: 14px;
+	font-weight: 400;
+	color: var(--text);
+	opacity: 0.88;
+}
+.current-name {
+	color: var(--primary);
+}
+.row-menu {
+	width: 44px;
+	height: 44px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+}
+.artist {
+	width: 100px;
+	text-align: right;
+	font-size: 11px;
+	color: var(--text);
+	opacity: 0.58;
+	margin-right: 12px;
+}
+</style>

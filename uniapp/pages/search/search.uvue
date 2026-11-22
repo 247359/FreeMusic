@@ -1,0 +1,383 @@
+<template>
+	<view class="page" :class="themeClass">
+		<view class="header" :class="themeClass" :style="{ paddingTop: statusBar + 'px' }">
+			<view class="bar">
+				<view class="back-hit" @click="back">
+					<AppIcon name="arrow-left" :size="20" />
+				</view>
+				<view class="input-wrap">
+					<AppIcon name="search" :size="16" :opacity="0.5" />
+					<input
+						class="input"
+						v-model="keyword"
+						:focus="true"
+						placeholder="搜索歌曲、歌手、专辑"
+						placeholder-class="ph"
+						confirm-type="search"
+						@confirm="doSearch"
+						@input="onInput"
+					/>
+				</view>
+				<text class="go press" @click="doSearch">搜索</text>
+			</view>
+		</view>
+		<view :style="{ height: headerH + 'px' }"></view>
+
+		<scroll-view class="scroll" :show-scrollbar="false" scroll-y :style="{ top: headerH + 'px', bottom: bottomH + 'px' }" @touchstart="tabSwipe.start" @touchmove="tabSwipe.move" @touchend="tabSwipe.end" @touchcancel="tabSwipe.cancel">
+			<!-- 初始页：热搜 + 历史 + 搜索建议（建议与历史并存，不再互相隐藏） -->
+			<view v-if="!searched" class="content">
+				<view v-if="suggest.length" class="block">
+					<SectionTitle title="搜索建议" :tracks="suggest" />
+					<TrackList :tracks="suggest" @play="playSuggest" @more="onTrackMore" />
+				</view>
+				<view v-if="!suggest.length && hotKeywords.length > 0" class="block">
+					<SectionTitle title="曲库流派" />
+					<view class="chips">
+						<view v-for="h in hotKeywords" :key="h" class="chip press" @click="browseGenre(h)">
+							<text class="chip-text">{{ genreLabel(h) }}</text>
+						</view>
+					</view>
+				</view>
+				<view v-if="historyList.length" class="block">
+					<view class="history-head">
+						<SectionTitle title="搜索历史" :tight="true" />
+						<view class="head-btn press" @click="clearHistory">
+							<AppIcon name="x" :size="16" :opacity="0.45" />
+						</view>
+					</view>
+					<view class="chips">
+						<view v-for="h in historyList" :key="h" class="chip press" @click="searchKeyword(h)">
+							<text>{{ h }}</text>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- 搜索结果 -->
+			<view v-else class="content">
+				<view class="tabs">
+					<SectionTabs :items="resultTabs" :selected="resultTab" @change="setResultTab" />
+				</view>
+				<PageState :loading="loading" :error="error" @retry="doSearch">
+					<view v-if="resultTab === 'songs'" class="result">
+						<SectionTitle :title="'找到 ' + results.songs.length + ' 首歌曲'" :tracks="results.songs" :tight="true" />
+						<TrackList :tracks="results.songs" :show-album="true" @play="playResult" @more="onTrackMore" />
+					</view>
+					<view v-else class="grid">
+						<CoverCard
+							v-for="item in currentResults"
+							:key="resultTab + item.id"
+							:item="item"
+							:type="cardType"
+							:width="cardWidth"
+						:gap="10"
+							:sub="resultTab === 'albums' ? 'artist' : 'count'"
+							@click="onGoDetail(resultTab, item)"
+							@play="playOne(resultTab, item)"
+						/>
+						<view v-if="!currentResults.length" class="empty"><text class="empty-text">没有找到相关内容</text></view>
+					</view>
+				</PageState>
+			</view>
+		</scroll-view>
+
+		<MiniPlayer :with-nav="false" />
+	</view>
+</template>
+
+<script setup>
+import SectionTabs from '../../components/SectionTabs.uvue'
+import { createTabSwipe } from '../../common/swipe.js'
+import AppIcon from '../../components/AppIcon.uvue'
+import SectionTitle from '../../components/SectionTitle.uvue'
+import TrackList from '../../components/TrackList.uvue'
+import CoverCard from '../../components/CoverCard.uvue'
+import PageState from '../../components/PageState.uvue'
+import MiniPlayer from '../../components/MiniPlayer.uvue'
+import {
+	statusBarHeight,
+	headerHeight,
+	miniPlayerClearance,
+	windowWidth
+} from '../../common/config.js'
+import {
+	player,
+	useTheme,
+	getSearchHistory,
+	addSearchHistory,
+	clearSearchHistory as clearHist
+} from '../../common/store.js'
+import * as api from '../../common/api.js'
+import { goDetail, goList, playCollection, showTrackMenu } from '../../common/actions.js'
+import { setQueue } from '../../common/player.js'
+import { genreLabel } from '../../common/format.js'
+
+const keyword = ref('')
+const searched = ref(false)
+const loading = ref(false)
+const error = ref('')
+const resultTab = ref('songs')
+const results = ref({ songs: [], albums: [], artists: [], playlists: [] })
+const suggest = ref([])
+const hotKeywords = ref([])
+const historyList = ref([])
+let timer = null
+let suggestSeq = 0
+let searchSeq = 0
+const resultTabs = [
+	{ key: 'songs', label: '单曲' },
+	{ key: 'albums', label: '专辑' },
+	{ key: 'artists', label: '歌手' },
+	{ key: 'playlists', label: '歌单' }
+]
+
+const tabSwipe = createTabSwipe(resultTabs.map((tab) => tab.key), () => searched.value ? resultTab.value : '', setResultTab)
+const themeClass = computed(() => useTheme().themeClass())
+const statusBar = computed(() => statusBarHeight())
+const headerH = computed(() => headerHeight())
+const bottomH = computed(() => miniPlayerClearance(player.visible) + 8)
+const cardWidth = computed(() => Math.floor((windowWidth - 32 - 20) / 3))
+const currentResults = computed(() => results.value[resultTab.value] || [])
+const cardType = computed(() => ({ albums: 'album', artists: 'artist', playlists: 'playlist' }[resultTab.value] || resultTab.value))
+
+onLoad(() => {
+	historyList.value = getSearchHistory()
+	api.getHotKeywords().then((list) => (hotKeywords.value = list || []))
+})
+
+onUnload(() => {
+	if (timer) clearTimeout(timer)
+})
+
+function setResultTab(k) {
+	resultTab.value = k
+}
+
+function onTrackMore(e) {
+	showTrackMenu(e && e.track)
+}
+
+function onInput() {
+	searched.value = false
+	suggest.value = []
+	if (timer) clearTimeout(timer)
+	const kw = keyword.value.trim()
+	if (!kw) {
+		suggestSeq++
+		return
+	}
+	const seq = ++suggestSeq
+	timer = setTimeout(() => {
+		api
+			.search(kw, 6)
+			.then((r) => {
+				if (seq === suggestSeq && !searched.value) suggest.value = r.songs || []
+			})
+			.catch(() => {
+				if (seq === suggestSeq) suggest.value = []
+			})
+	}, 350)
+}
+
+function doSearch() {
+	const kw = keyword.value.trim()
+	if (!kw) return
+	if (timer) clearTimeout(timer)
+	suggestSeq++ // 正式搜索后作废在途联想，避免回弹覆盖结果页
+	const seq = ++searchSeq
+	searched.value = true
+	loading.value = true
+	error.value = ''
+	resultTab.value = 'songs'
+	addSearchHistory(kw)
+	historyList.value = getSearchHistory()
+	api
+		.search(kw, 50)
+		.then((r) => {
+			if (seq !== searchSeq) return
+			results.value = r
+			loading.value = false
+		})
+		.catch((e) => {
+			if (seq !== searchSeq) return
+			error.value = e.message || '搜索失败'
+			loading.value = false
+		})
+}
+
+function searchKeyword(kw) {
+	keyword.value = kw
+	doSearch()
+}
+
+function browseGenre(name) {
+	goList('genre', name, genreLabel(name))
+}
+
+function clearHistory() {
+	clearHist()
+	historyList.value = []
+}
+
+function playSuggest(i) {
+	setQueue(suggest.value, i, { name: '搜索建议' })
+}
+
+function playResult(i) {
+	setQueue(results.value.songs, i, { name: '搜索结果' })
+}
+
+function playOne(type, item) {
+	const map = { albums: 'album', artists: 'artist', songs: 'album', playlists: 'playlist' }
+	playCollection(map[type] || type, item.id, { name: item.name })
+}
+
+function onGoDetail(type, item) {
+	// resultTab 为 albums/artists/playlists，路由需要单数
+	const map = { albums: 'album', artists: 'artist', songs: 'album', playlists: 'playlist' }
+	goDetail(map[type] || type, item)
+}
+
+function back() {
+	const pages = getCurrentPages()
+	if (pages.length > 1) uni.navigateBack()
+	else uni.reLaunch({ url: '/pages/index/index' })
+}
+</script>
+
+<style scoped>
+.page {
+	height:  100%;
+	background-color: var(--bg);
+}
+.header {
+	position: fixed;
+	left: 0;
+	right: 0;
+	top: 0;
+	z-index: 90;
+	background-color: var(--bg);
+}
+.bar {
+	height: 48px;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding-left: 4px;
+	padding-right: 12px;
+}
+.back-hit {
+	width: 44px;
+	height: 48px;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+}
+.input-wrap {
+	flex: 1;
+	height: 34px;
+	border-radius: 9px;
+	background-color: var(--secondary-bg);
+	margin: 0 10px;
+	padding: 0 10px;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+.input {
+	flex: 1;
+	font-size: 13px;
+	color: var(--text);
+	margin-left: 7px;
+}
+.ph {
+	color: var(--text);
+	opacity: 0.45;
+}
+.go {
+	font-size: 13px;
+	font-weight: 400;
+	color: var(--primary);
+}
+.scroll {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+}
+.content {
+	padding: 16px 16px 20px;
+}
+.block {
+	margin-bottom: 28px;
+}
+.chips {
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+.chip {
+	padding: 8px 12px;
+	margin: 0 8px 8px 0;
+	border-radius: 8px;
+	background-color: var(--secondary-bg);
+	font-size: 12px;
+	font-weight: 400;
+	color: var(--text);
+	opacity: 0.85;
+	flex-direction: row;
+	align-items: center;
+}
+.chip-text {
+	font-size: 13px;
+	color: var(--text);
+}
+.history-head {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-bottom: 14px;
+}
+.head-btn {
+	width: 34px;
+	height: 34px;
+	flex-shrink: 0;
+	margin-right: -9px;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+}
+.tabs {
+	flex-direction: row;
+	margin-bottom: 12px;
+}
+.count {
+	font-size: 11px;
+	color: var(--text);
+	opacity: 0.58;
+}
+.result {
+	padding-top: 4px;
+}
+.grid {
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+.empty {
+	display: flex;
+	flex-direction: row;
+	justify-content: center;
+	align-items: center;
+	width: 100%;
+	padding: 60px 0;
+}
+.empty-text {
+	font-size: 13px;
+	color: var(--text);
+	opacity: 0.58;
+	text-align: center;
+}
+</style>

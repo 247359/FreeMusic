@@ -1,0 +1,30 @@
+import Context from 'android.content.Context'
+import AudioManager from 'android.media.AudioManager'
+import { UTSAndroid } from 'io.dcloud.uts'
+
+function audioManager(): AudioManager | null {
+	const context = UTSAndroid.getAppContext()
+	return context?.getSystemService(Context.AUDIO_SERVICE) as AudioManager | null
+}
+
+export function getMediaVolume(): number {
+	const audio = audioManager()
+	if (audio == null || audio.isVolumeFixed()) return -1
+	const max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+	if (max <= 0) return -1
+	return Math.round(audio.getStreamVolume(AudioManager.STREAM_MUSIC).toDouble() * 100.0 / max.toDouble())
+}
+
+export function setMediaVolume(percent: number): number {
+	const audio = audioManager()
+	if (audio == null || audio.isVolumeFixed()) return -1
+	const max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+	const bounded = Math.max(0, Math.min(100, percent))
+	const level = Math.round(bounded * max.toDouble() / 100.0).toInt()
+	try {
+		audio.setStreamVolume(AudioManager.STREAM_MUSIC, level, 0)
+	} catch (_error) {
+		return getMediaVolume()
+	}
+	return getMediaVolume()
+}

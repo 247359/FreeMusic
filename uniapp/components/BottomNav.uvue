@@ -1,0 +1,73 @@
+<template>
+	<view class="bottom-nav" :class="themeClass" :style="{ height: navHeightPx }">
+		<view
+			v-for="item in tabs"
+			:key="item.key"
+			class="tab press"
+			:style="{ height: BOTTOM_BAR_HEIGHT + 'px' }"
+			@click="emit('change', item.key)"
+		>
+			<AppIcon
+				:name="item.icon"
+				:color="props.active === item.key ? 'primary' : 'text'"
+				:opacity="props.active === item.key ? 1 : 0.58"
+				:size="21"
+			/>
+			<text class="label" :class="{ on: props.active === item.key }">{{ item.label }}</text>
+		</view>
+	</view>
+</template>
+
+<script setup>
+import AppIcon from './AppIcon.uvue'
+import { BOTTOM_BAR_HEIGHT, navBarHeight } from '../common/config.js'
+import { themeState } from '../common/store.js'
+
+const props = defineProps({
+	active: { type: String, default: 'home' }
+})
+const emit = defineEmits(['change'])
+
+const themeClass = computed(() => (themeState.isDark ? 'theme-dark' : 'theme-light'))
+const navHeightPx = computed(() => navBarHeight() + 'px')
+const tabs = computed(() => [
+	{ key: 'home', label: '首页', icon: 'home' },
+	{ key: 'explore', label: '发现', icon: 'search' },
+	{ key: 'library', label: '音乐库', icon: 'library' }
+])
+</script>
+
+<style scoped>
+.bottom-nav {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	background-color: var(--bg);
+	border-top-width: 1px;
+	border-top-style: solid;
+	border-top-color: var(--control-divider);
+	z-index: 95;
+}
+.tab {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+}
+.label {
+	margin-top: 3px;
+	font-size: 11px;
+	font-weight: 400;
+	color: var(--text);
+	opacity: 0.58;
+}
+.label.on {
+	color: var(--primary);
+	opacity: 1;
+}
+</style>

@@ -1,0 +1,454 @@
+<template>
+	<view class="page" :class="themeClass">
+		<NavHeader title="设置" />
+		<view :style="{ height: headerH + 'px' }"></view>
+		<scroll-view class="scroll" :show-scrollbar="false" scroll-y :style="{ top: headerH + 'px', bottom: '20px' }">
+			<!-- 服务器 -->
+			<view class="group">
+				<text class="group-title">Navidrome 服务器</text>
+				<view class="status">
+					<view class="dot" :class="{ on: connected }"></view>
+					<text class="status-text">{{ connected ? '已配置 · ' + user.username : '未配置' }}</text>
+				</view>
+				<view class="field-row">
+					<text class="label">服务器地址</text>
+					<input class="input" v-model="form.server" placeholder="https://music.example.com" placeholder-class="ph" />
+				</view>
+				<view class="field-row">
+					<text class="label">用户名</text>
+					<input class="input" v-model="form.username" placeholder="用户名" placeholder-class="ph" />
+				</view>
+				<view class="field-row">
+					<text class="label">密码</text>
+					<input class="input" :password="true" v-model="form.password" placeholder="密码" placeholder-class="ph" />
+				</view>
+				<view v-if="error"><text class="error">{{ error }}</text></view>
+				<view class="buttons">
+					<view class="save-btn press" @click="save"><text class="primary-label">{{ testing ? '正在连接…' : '保存并连接' }}</text></view>
+					<view v-if="connected" class="danger-btn press" @click="disconnect"><text class="option-label">断开</text></view>
+				</view>
+			</view>
+
+			<!-- 音质 -->
+			<view class="group">
+				<text class="group-title">串流音质</text>
+				<text class="group-tip">从下一首生效。原始音质请求源文件，其余档位为 MP3 转码的码率上限。</text>
+				<view class="options">
+					<view
+						v-for="b in bitrates"
+						:key="b.value"
+						class="option"
+						:class="{ on: form.bitrate === b.value }"
+						@click="setBitrate(b.value)"
+					><text class="option-label" :class="{ 'option-label-active': form.bitrate === b.value }">{{ b.label }}</text></view>
+				</view>
+			</view>
+
+			<!-- 外观 -->
+			<view class="group">
+				<text class="group-title">主题</text>
+				<view class="options">
+					<view
+						v-for="t in themes"
+						:key="t.value"
+						class="option"
+						:class="{ on: settings.theme === t.value }"
+						@click="setTheme(t.value)"
+					><text class="option-label" :class="{ 'option-label-active': settings.theme === t.value }">{{ t.label }}</text></view>
+				</view>
+			</view>
+			<view class="group">
+				<text class="group-title">播放界面</text>
+				<view class="slider-row">
+					<text class="label">歌词字号 {{ settings.lyricFontSize }}px</text>
+					<slider
+						class="font-slider"
+						:min="14"
+						:max="26"
+						:step="1"
+						:show-value="false"
+						activeColor="#335eea"
+						block-size="14"
+						:value="settings.lyricFontSize"
+						@change="onFontChange"
+					/>
+				</view>
+				<view class="switch-row">
+					<text class="label">显示封面背景</text>
+					<switch :checked="settings.lyricsBackground" color="#335eea" @change="onBgChange" />
+				</view>
+				<view class="switch-row">
+					<text class="label">显示译文（歌曲提供时）</text>
+					<switch :checked="settings.showTranslation" color="#335eea" @change="onTransChange" />
+				</view>
+			</view>
+
+			<!-- 数据 -->
+			<view class="group">
+				<text class="group-title">数据</text>
+				<view class="action-row press" @click="clearHistory">
+					<text class="action-text">清空播放历史</text>
+					<AppIcon name="arrow-right" :size="17" :opacity="0.4" />
+				</view>
+				<view class="action-row press" @click="clearSearch">
+					<text class="action-text">清空搜索历史</text>
+					<AppIcon name="arrow-right" :size="17" :opacity="0.4" />
+				</view>
+			</view>
+
+			<view class="group">
+				<view class="action-row press" @click="openTutorial">
+					<text class="action-text">Navidrome 部署教程</text>
+					<AppIcon name="arrow-right" :size="17" :opacity="0.4" />
+				</view>
+				<!-- #ifdef APP-ANDROID -->
+				<view class="action-row press" @click="checkForUpdates">
+					<text class="action-text">{{ checkingUpdate ? '正在检查更新…' : '检查应用更新' }}</text>
+					<AppIcon name="arrow-right" :size="17" :opacity="0.4" />
+				</view>
+				<!-- #endif -->
+			</view>
+			<view class="about">
+				<text class="about-text">FreeMusic {{ appVersion }}</text>
+			</view>
+		</scroll-view>
+	</view>
+</template>
+
+<script setup>
+import NavHeader from '../../components/NavHeader.uvue'
+import AppIcon from '../../components/AppIcon.uvue'
+import { headerHeight } from '../../common/config.js'
+import {
+	settings,
+	user,
+	useTheme,
+	saveSettings,
+	applyTheme,
+	clearHistory as clearPlayHistory,
+	clearSearchHistory
+} from '../../common/store.js'
+import * as api from '../../common/api.js'
+import { toast, confirm } from '../../common/format.js'
+import { selectReleaseUpdate, validReleaseRepository } from '../../common/update.js'
+// #ifdef APP-ANDROID
+import { readReleaseInfo, openReleaseDownload } from '../../uni_modules/freemusic-release'
+// #endif
+
+let releaseInfo = {}
+// #ifdef APP-ANDROID
+releaseInfo = JSON.parse(readReleaseInfo())
+// #endif
+const appVersion = releaseInfo.version || ''
+const checkingUpdate = ref(false)
+
+function checkForUpdates() {
+	// #ifdef APP-ANDROID
+	if (checkingUpdate.value) return
+	if (!validReleaseRepository(releaseInfo.repository)) {
+		toast('此安装包未配置 GitHub 更新源')
+		return
+	}
+	checkingUpdate.value = true
+	uni.request({
+		url: 'https://api.github.com/repos/' + releaseInfo.repository + '/releases/latest',
+		header: { Accept: 'application/vnd.github+json' },
+		timeout: 12000,
+		success(response) {
+			if (response.statusCode !== 200) {
+				toast(response.statusCode === 404 ? '还没有公开发布版本' : 'GitHub 更新检查失败')
+				return
+			}
+			try {
+				const update = selectReleaseUpdate(response.data, releaseInfo)
+				if (!update) toast('已是最新版本')
+				else if (!update.url) toast('新版本暂无适合本机架构的安装包')
+				else uni.showModal({
+					title: '发现新版本 ' + update.version,
+					content: '下载 ' + releaseInfo.abi + ' 安装包后，按 Android 提示安装。',
+					confirmText: '前往下载',
+					success(result) {
+						if (result.confirm && !openReleaseDownload(update.url)) toast('无法打开下载链接')
+					}
+				})
+			} catch (error) {
+				toast(error.message || '无法读取更新信息')
+			}
+		},
+		fail() { toast('无法连接 GitHub，请稍后重试') },
+		complete() { checkingUpdate.value = false }
+	})
+	// #endif
+}
+
+const form = ref({
+	server: settings.navidrome.server || '',
+	username: settings.navidrome.username || '',
+	password: settings.navidrome.password || '',
+	bitrate: Number(settings.navidrome.bitrate ?? 320)
+})
+const error = ref('')
+const testing = ref(false)
+const bitrates = [
+	{ label: '原始', value: 0 },
+	{ label: '128 kbps', value: 128 },
+	{ label: '192 kbps', value: 192 },
+	{ label: '320 kbps', value: 320 }
+]
+const themes = [
+	{ label: '浅色', value: 'light' },
+	{ label: '深色', value: 'dark' },
+	{ label: '跟随系统', value: 'auto' }
+]
+
+const themeClass = computed(() => useTheme().themeClass())
+const headerH = computed(() => headerHeight())
+const connected = computed(() => !!(settings.navidrome.server && settings.navidrome.username && settings.navidrome.password))
+
+function save() {
+	if (testing.value) return
+	testing.value = true
+	error.value = ''
+	const connection = { ...form.value }
+	api
+		.testConnection(connection)
+		.then(() => {
+			api.connect(connection)
+			saveSettings()
+			toast('已保存并连接', 'success')
+		})
+		.catch((e) => {
+			error.value = e.message || '连接失败'
+		})
+		.finally(() => {
+			testing.value = false
+		})
+}
+
+function openTutorial() {
+	uni.navigateTo({ url: '/pages/tutorial/tutorial' })
+}
+
+function disconnect() {
+	if (testing.value) return
+	confirm('断开后将返回连接向导，本地播放历史会保留。', '断开连接').then((ok) => {
+		if (!ok) return
+		settings.navidrome.server = ''
+		settings.navidrome.username = ''
+		settings.navidrome.password = ''
+		form.value.server = ''
+		form.value.username = ''
+		form.value.password = ''
+		api.disconnect()
+		saveSettings()
+		toast('已断开')
+		setTimeout(() => uni.reLaunch({ url: '/pages/index/index' }), 500)
+	})
+}
+
+function setTheme(value) {
+	settings.theme = value
+	saveSettings()
+	applyTheme()
+}
+
+function setBitrate(value) {
+	form.value.bitrate = value
+	// 码率即时生效：直接写入配置并落盘，无需重新连接（下次播放即按新码率请求）
+	settings.navidrome.bitrate = value
+	saveSettings()
+	toast('下次播放生效')
+}
+
+function onFontChange(e) {
+	settings.lyricFontSize = Number(e.detail.value)
+	saveSettings()
+}
+
+function onBgChange(e) {
+	settings.lyricsBackground = !!e.detail.value
+	saveSettings()
+}
+
+function onTransChange(e) {
+	settings.showTranslation = !!e.detail.value
+	saveSettings()
+}
+
+function clearHistory() {
+	confirm('确定清空全部播放历史？').then((ok) => {
+		if (ok) {
+			clearPlayHistory()
+			toast('已清空')
+		}
+	})
+}
+
+function clearSearch() {
+	clearSearchHistory()
+	toast('已清空')
+}
+</script>
+
+<style scoped>
+.page {
+	height:  100%;
+	background-color: var(--bg);
+}
+.scroll {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+}
+.group {
+	background-color: var(--bg);
+	margin: 12px 16px;
+	padding: 16px;
+	border-radius: 12px;
+}
+.group-title {
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--text);
+}
+.group-tip {
+	display: flex;
+	font-size: 11px;
+	color: var(--text);
+	opacity: 0.58;
+	margin-top: 6px;
+}
+.status {
+	flex-direction: row;
+	align-items: center;
+	margin-top: 14px;
+	padding: 10px 12px;
+	border-radius: 8px;
+	background-color: var(--secondary-bg);
+}
+.dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background-color: var(--secondary);
+	margin-right: 8px;
+}
+.dot.on {
+	background-color: #35c759;
+}
+.status-text {
+	font-size: 13px;
+	color: var(--text);
+	opacity: 0.88;
+	flex: 1;
+}
+.field-row {
+	margin-top: 12px;
+}
+.label {
+	font-size: 12px;
+	font-weight: 400;
+	color: var(--text);
+	opacity: 0.78;
+}
+.input {
+	height: 38px;
+	border-radius: 8px;
+	background-color: var(--secondary-bg);
+	margin-top: 6px;
+	padding: 0 11px;
+	font-size: 13px;
+	color: var(--text);
+}
+.ph {
+	color: var(--text);
+	opacity: 0.4;
+}
+.error {
+	font-size: 12px;
+	color: #e0533d;
+	margin-top: 8px;
+}
+.buttons {
+	flex-direction: row;
+	margin-top: 14px;
+}
+.save-btn {
+	height: 40px;
+	padding: 0 20px;
+	border-radius: 8px;
+	background-color: var(--primary);
+	color: #ffffff;
+	font-size: 14px;
+	font-weight: 400;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.danger-btn {
+	height: 40px;
+	padding: 0 18px;
+	border-radius: 8px;
+	background-color: var(--secondary-bg);
+	color: var(--text);
+	font-size: 14px;
+	font-weight: 400;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-left: 10px;
+}
+.options {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 12px;
+}
+.option {
+	padding: 8px 11px;
+	margin: 0 6px 8px 0;
+	border-radius: 8px;
+	background-color: var(--secondary-bg);
+	font-size: 12px;
+	font-weight: 400;
+	color: var(--text);
+	opacity: 0.78;
+}
+.option.on {
+	background-color: var(--primary-bg);
+	color: var(--primary);
+	opacity: 1;
+}
+.slider-row {
+	margin-top: 16px;
+}
+.font-slider {
+	width: 100%;
+}
+.switch-row,
+.action-row {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 18px;
+}
+.action-text {
+	font-size: 13px;
+	color: var(--text);
+	opacity: 0.88;
+}
+.about {
+	flex-direction: column;
+	align-items: center;
+	padding: 20px 0 40px;
+}
+.about-text {
+	font-size: 11px;
+	color: var(--text);
+	opacity: 0.38;
+	line-height: 20px;
+}
+.primary-label { color: #ffffff; }
+.option-label { color: var(--text); }
+.option-label-active { color: var(--primary); }
+</style>

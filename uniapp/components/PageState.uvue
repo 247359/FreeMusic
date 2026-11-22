@@ -1,0 +1,71 @@
+<template>
+	<view class="state">
+		<view v-if="props.loading" class="box">
+			<view class="spinner"></view>
+			<text class="tip">{{ props.loadingText }}</text>
+		</view>
+		<view v-else-if="props.error" class="box">
+			<text class="tip">{{ props.error }}</text>
+			<view v-if="props.retry" class="retry press" @click="emit('retry')"><text>重试</text></view>
+		</view>
+		<view v-else-if="props.empty" class="box">
+			<AppIcon name="list" :size="34" :opacity="0.28" />
+			<text class="tip">{{ props.emptyText }}</text>
+		</view>
+		<slot v-else></slot>
+	</view>
+</template>
+
+<script setup>
+import AppIcon from './AppIcon.uvue'
+
+const props = defineProps({
+	loading: { type: Boolean, default: false },
+	error: { type: String, default: '' },
+	empty: { type: Boolean, default: false },
+	loadingText: { type: String, default: '加载中…' },
+	emptyText: { type: String, default: '这里还没有内容' },
+	retry: { type: Boolean, default: true }
+})
+const emit = defineEmits(['retry'])
+</script>
+
+<style scoped>
+.box {
+	min-height: 220px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+}
+.spinner {
+	width: 26px;
+	height: 26px;
+	border-width: 2px;
+	border-style: solid;
+	border-color: var(--secondary-bg-t);
+	border-top-color: var(--primary);
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+	margin-bottom: 12px;
+}
+@keyframes spin {
+	to { transform: rotate(360deg); }
+}
+.tip {
+	font-size: 13px;
+	color: var(--text);
+	opacity: 0.58;
+	text-align: center;
+	margin-top: 10px;
+}
+.retry {
+	margin-top: 14px;
+	padding: 7px 18px;
+	border-radius: 8px;
+	background-color: var(--primary-bg);
+	color: var(--primary);
+	font-size: 13px;
+	font-weight: 400;
+}
+</style>

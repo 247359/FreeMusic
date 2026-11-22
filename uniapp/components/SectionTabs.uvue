@@ -1,0 +1,66 @@
+<template>
+	<view class="section-tabs">
+		<view v-for="item in items" :key="item.key" class="section-tab press" @click="emit('change', item.key)">
+			<view class="section-tab-copy">
+				<text class="section-tab-label" :class="{ selected: selected === item.key }" :max-lines="1">{{ item.label }}</text>
+				<text v-if="item.count != null" class="section-tab-count">{{ item.count }}</text>
+			</view>
+			<view class="section-tab-mark" :class="{ visible: selected === item.key }"></view>
+		</view>
+	</view>
+</template>
+
+<script setup>
+defineProps({
+	items: { type: Array, required: true },
+	selected: { type: [String, Number], required: true }
+})
+const emit = defineEmits(['change'])
+</script>
+
+<style scoped>
+.section-tabs {
+	width: 100%;
+	height: 44px;
+	flex-direction: row;
+}
+.section-tab {
+	flex: 1;
+	min-width: 0;
+	align-items: center;
+}
+.section-tab-copy {
+	height: 37px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+}
+.section-tab-label {
+	font-size: 14px;
+	color: var(--text);
+	opacity: 0.64;
+	text-overflow: ellipsis;
+}
+.section-tab-label.selected {
+	font-size: 15px;
+	color: var(--section-active);
+	opacity: 1;
+}
+.section-tab-count {
+	margin-left: 5px;
+	font-size: 11px;
+	color: var(--text);
+	opacity: 0.55;
+}
+.section-tab-mark {
+	width: 16px;
+	height: 2px;
+	border-radius: 1px;
+	background-color: var(--section-active);
+	opacity: 0;
+}
+.section-tab-mark.visible {
+	opacity: 1;
+}
+</style>

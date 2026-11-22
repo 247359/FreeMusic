@@ -1,0 +1,290 @@
+<template>
+	<view class="page" :class="themeClass">
+		<NavHeader :title="title">
+			<template #right>
+				<AppIcon v-if="from === 'library'" name="search" :size="21" @click="toggleSearch" />
+				<view v-else-if="from === 'rediscover' && !loading" class="reroll press" @click="load"><text class="reroll-label">换一批</text></view>
+			</template>
+		</NavHeader>
+		<view :style="{ height: headerH + 'px' }"></view>
+		<scroll-view class="scroll" :show-scrollbar="false" scroll-y :style="{ top: headerH + 'px', bottom: bottomH + 'px' }" @scrolltolower="loadMore">
+			<view v-if="showSearch" class="library-search">
+				<input v-model="queryDraft" class="library-input" placeholder="搜索全部歌曲或歌手" confirm-type="search" :focus="true" @confirm="submitSearch" />
+				<text class="library-submit" @click="submitSearch">搜索</text>
+			</view>
+			<PageState :loading="loading" :error="error" @retry="load">
+				<view class="hero">
+					<text class="date">{{ subtitle }}</text>
+					<text class="hero-title">{{ title }}</text>
+					<text class="hero-sub">{{ tracks.length }} 首歌曲 · 来自你的音乐库</text>
+					<view v-if="tracks.length" class="play-actions">
+						<view class="play-all press" @click="playAll">
+							<AppIcon name="play" color="light" :size="16" />
+							<text class="btn-text">{{ hasMore ? '播放已加载歌曲' : '播放全部' }}</text>
+						</view>
+						<TrackSelectionButton :tracks="tracks" />
+					</view>
+				</view>
+				<view v-if="tracks.length" class="list">
+					<TrackList :tracks="tracks" :show-album="true" :show-end="!hasMore"
+						:footer-text="loadingMore ? '正在加载…' : moreError"
+						@play="playAt" @more="onTrackMore" @footer="retryMore" />
+				</view>
+				<view v-else class="empty"><text class="empty-text">{{ query ? '没有找到匹配的歌曲' : '这里还没有歌曲' }}</text></view>
+			</PageState>
+		</scroll-view>
+		<MiniPlayer :with-nav="false" />
+	</view>
+</template>
+
+<script setup>
+import TrackSelectionButton from '../../components/TrackSelectionButton.uvue'
+import NavHeader from '../../components/NavHeader.uvue'
+import PageState from '../../components/PageState.uvue'
+import TrackList from '../../components/TrackList.uvue'
+import MiniPlayer from '../../components/MiniPlayer.uvue'
+import AppIcon from '../../components/AppIcon.uvue'
+import { headerHeight, miniPlayerClearance } from '../../common/config.js'
+import { player, themeState, history, getMostPlayed } from '../../common/store.js'
+import * as api from '../../common/api.js'
+import { setQueue } from '../../common/player.js'
+import { showTrackMenu } from '../../common/actions.js'
+import { todayLabel } from '../../common/format.js'
+
+const from = ref('album')
+const listType = ref('daily')
+const title = ref('每日推荐')
+const subtitle = ref(todayLabel())
+const tracks = ref([])
+const loading = ref(true)
+const error = ref('')
+const pageSize = 60
+const offset = ref(0)
+const hasMore = ref(false)
+const loadingMore = ref(false)
+const moreError = ref('')
+const showSearch = ref(false)
+const queryDraft = ref('')
+const query = ref('')
+const paged = computed(() => from.value === 'library' || from.value === 'genre')
+let requestId = 0
+
+const themeClass = computed(() => (themeState.isDark ? 'theme-dark' : 'theme-light'))
+const headerH = computed(() => headerHeight())
+const bottomH = computed(() => miniPlayerClearance(player.visible) + 8)
+
+onLoad((options) => {
+	from.value = options.from || 'album'
+	listType.value = options.listType || ''
+	title.value = options.title || '每日推荐'
+	if (listType.value === 'daily') subtitle.value = todayLabel()
+	load()
+})
+
+function onTrackMore(e) {
+	showTrackMenu(e && e.track)
+}
+
+function load() {
+	const id = ++requestId
+	loading.value = true
+	loadingMore.value = false
+	moreError.value = ''
+	hasMore.value = false
+	error.value = ''
+	let p
+	if (paged.value) {
+		subtitle.value = 'Navidrome 音乐库'
+		offset.value = 0
+		p = fetchTrackPage(0).then((list) => {
+			if (id === requestId) {
+				offset.value = list.length
+				hasMore.value = list.length === pageSize
+			}
+			return list
+		})
+	} else if (from.value === 'recent') {
+		p = Promise.resolve(history.list)
+		subtitle.value = '按最近播放时间排序'
+	} else if (from.value === 'mostPlayed') {
+		p = Promise.resolve(getMostPlayed(100))
+		subtitle.value = '按本地播放次数排序'
+	} else if (from.value === 'rediscover') {
+		p = api.getRediscoverySongs()
+		subtitle.value = '从曲库抽样，优先选本机较少播放的歌曲'
+	} else if (from.value === 'years') {
+		const [fromYear, toYear] = listType.value.split('-').map(Number)
+		p = api.getRandomSongs(60, { fromYear, toYear })
+		subtitle.value = '按曲库标注的发行年份选歌'
+	} else if (listType.value === 'daily') {
+		p = api.getDailySongs(40)
+	} else if (listType.value === 'starred') {
+		p = api.getVirtualTracks('starred', 100)
+	} else if (listType.value === 'random') {
+		p = api.getRandomSongs(60)
+	} else if (listType.value === 'frequent') {
+		p = api.getVirtualTracks('frequent', 60)
+	} else {
+		p = api.getVirtualTracks(listType.value || 'newest', 60)
+	}
+	p.then((list) => {
+		if (id !== requestId) return
+		tracks.value = list || []
+		loading.value = false
+	}).catch((e) => {
+		if (id !== requestId) return
+		error.value = e.message || '加载失败'
+		loading.value = false
+	})
+}
+
+function toggleSearch() {
+	showSearch.value = !showSearch.value
+	if (!showSearch.value && (query.value || queryDraft.value)) {
+		queryDraft.value = ''
+		submitSearch()
+	}
+}
+
+function submitSearch() {
+	query.value = queryDraft.value.trim()
+	load()
+}
+
+function retryMore() {
+	if (moreError.value) loadMore()
+}
+
+function loadMore() {
+	if (!paged.value || loading.value || loadingMore.value || !hasMore.value) return
+	loadingMore.value = true
+	moreError.value = ''
+	const id = requestId
+	fetchTrackPage(offset.value).then((list) => {
+		if (id !== requestId) return
+		const ids = new Set(tracks.value.map((track) => track.id))
+		const fresh = list.filter((track) => !ids.has(track.id))
+		tracks.value = tracks.value.concat(fresh)
+		offset.value += list.length
+		hasMore.value = list.length === pageSize
+	}).catch(() => {
+		if (id === requestId) moreError.value = '加载失败，点击重试'
+	}).finally(() => {
+		if (id === requestId) loadingMore.value = false
+	})
+}
+
+function fetchTrackPage(position) {
+	if (from.value === 'genre') return api.getGenreTracks(listType.value, position, pageSize)
+	return api.getLibraryTracks(position, pageSize, query.value)
+}
+
+function playAll() {
+	setQueue(tracks.value, 0, { name: title.value })
+}
+
+function playAt(i) {
+	setQueue(tracks.value, i, { name: title.value })
+	uni.navigateTo({ url: '/pages/player/player', animationType: 'slide-in-bottom', animationDuration: 260 })
+}
+</script>
+
+<style scoped>
+.page {
+	height:  100%;
+	background-color: var(--bg);
+}
+.library-search {
+	margin: 14px 16px 0;
+	padding: 4px 12px;
+	border-radius: 12px;
+	background-color: var(--secondary-bg);
+	flex-direction: row;
+	align-items: center;
+}
+.library-input {
+	flex: 1;
+	height: 42px;
+	color: var(--text);
+}
+.library-submit {
+	color: var(--primary);
+	padding: 10px;
+}
+.scroll {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+}
+.hero {
+	padding: 26px 20px 24px;
+}
+.date {
+	font-size: 13px;
+	font-weight: 400;
+	color: var(--primary);
+	opacity: 0.9;
+}
+.hero-title {
+	font-size: 30px;
+	font-weight: 600;
+	color: var(--text);
+	margin-top: 8px;
+	line-height: 38px;
+}
+.hero-sub {
+	font-size: 12px;
+	color: var(--text);
+	opacity: 0.58;
+	margin-top: 6px;
+}
+.play-all {
+	height: 40px;
+	padding: 0 20px;
+	border-radius: 8px;
+	background-color: var(--primary);
+	color: #ffffff;
+	font-size: 14px;
+	font-weight: 400;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+.play-actions {
+	margin-top: 22px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+.btn-text {
+	color: #ffffff;
+	font-size: 14px;
+	margin-left: 8px;
+}
+.list {
+	padding: 0 16px 20px;
+}
+.empty {
+	display: flex;
+	flex-direction: row;
+	justify-content: center;
+	align-items: center;
+	width: 100%;
+	padding: 60px 0;
+}
+.empty-text {
+	font-size: 13px;
+	color: var(--text);
+	opacity: 0.58;
+	text-align: center;
+}
+.reroll {
+	padding: 6px 4px;
+}
+.reroll-label {
+	color: var(--primary);
+	font-size: 12px;
+	font-weight: 400;
+}
+</style>

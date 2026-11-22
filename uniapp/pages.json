@@ -1,0 +1,111 @@
+{
+	"pages": [
+		{
+			"path": "pages/index/index",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#ffffff",
+				"app-plus": {
+					"bounce": "none"
+				}
+			}
+		},
+		{
+			"path": "pages/search/search",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#ffffff"
+			}
+		},
+		{
+			"path": "pages/track-selection/track-selection",
+			"style": {
+				"navigationBarTitleText": "选择歌曲"
+			}
+		},
+		{
+			"path": "pages/playlist/playlist",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#ffffff"
+			}
+		},
+		{
+			"path": "pages/favorites/favorites",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#ffffff"
+			}
+		},
+		{
+			"path": "pages/album/album",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#ffffff"
+			}
+		},
+		{
+			"path": "pages/artist/artist",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#ffffff"
+			}
+		},
+		{
+			"path": "pages/daily/daily",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#ffffff"
+			}
+		},
+		{
+			"path": "pages/genres/genres",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#ffffff"
+			}
+		},
+		{
+			"path": "pages/player/player",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#ffffff",
+				"app-plus": {
+					"animationType": "slide-in-bottom",
+					"animationDuration": 260,
+					"bounce": "none"
+				}
+			}
+		},
+		{
+			"path": "pages/login/login",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#ffffff"
+			}
+		},
+		{
+			"path": "pages/settings/settings",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#ffffff"
+			}
+		},
+		{
+			"path": "pages/tutorial/tutorial",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#ffffff"
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationStyle": "custom",
+		"navigationBarTextStyle": "black",
+		"navigationBarBackgroundColor": "#ffffff",
+		"backgroundColor": "#ffffff",
+		"backgroundTextStyle": "light",
+		"enablePullDownRefresh": false
+	},
+	"uniIdRouter": {}
+}

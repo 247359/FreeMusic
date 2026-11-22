@@ -1,0 +1,222 @@
+<template>
+	<view class="page" :class="themeClass">
+		<NavHeader title="连接 Navidrome" />
+		<view :style="{ height: headerH + 'px' }"></view>
+		<scroll-view class="scroll" :show-scrollbar="false" scroll-y :style="{ top: headerH + 'px' }">
+			<view class="intro">
+				<view class="logo"><image class="login-icon" src="/static/app-icons/icon-192.png" mode="aspectFit"></image></view>
+				<text class="title">连接你的音乐库</text>
+				<text class="desc">FreeMusic 通过 Subsonic API 读取 Navidrome 服务端的音乐、封面、歌词和歌单。所有数据都留在你自己的服务器上。</text>
+			</view>
+
+			<view class="form">
+				<view class="field">
+					<text class="label">服务器地址</text>
+					<input
+						class="input"
+						v-model="form.server"
+						placeholder="https://music.example.com"
+						placeholder-class="ph"
+						auto-capitalize-type="none"
+					/>
+					<text class="tip">不要带 /rest 后缀；手机需能访问该地址</text>
+				</view>
+				<view class="field">
+					<text class="label">用户名</text>
+					<input class="input" v-model="form.username" placeholder="Navidrome 用户名" placeholder-class="ph" />
+				</view>
+				<view class="field">
+					<text class="label">密码</text>
+					<input
+						class="input"
+						:password="true"
+						v-model="form.password"
+						placeholder="Navidrome 密码"
+						placeholder-class="ph"
+					/>
+				</view>
+				<view class="error" v-if="error"><text>{{ error }}</text></view>
+				<view class="primary-btn press" @click="submit">
+					<text class="primary-label">{{ testing ? '正在连接…' : '测试并连接' }}</text>
+				</view>
+			</view>
+
+			<view class="docker">
+				<SectionTitle title="还没有服务端？" />
+				<text class="docker-desc">在你的 NAS / 服务器上用 Docker 一行启动 Navidrome：</text>
+				<view class="code" user-select><text>
+					docker run -d --name navidrome -p 4533:4533 \
+					-v /你的音乐目录:/music \
+					-v /你的数据目录:/data \
+					deluan/navidrome
+				</text></view>
+				<text class="docker-tip">然后用浏览器打开 http://服务器IP:4533 创建管理员账号，再把地址填到上面。</text>
+			</view>
+		</scroll-view>
+	</view>
+</template>
+
+<script setup>
+import NavHeader from '../../components/NavHeader.uvue'
+import AppIcon from '../../components/AppIcon.uvue'
+import SectionTitle from '../../components/SectionTitle.uvue'
+import { headerHeight } from '../../common/config.js'
+import { settings, useTheme, saveSettings } from '../../common/store.js'
+import * as api from '../../common/api.js'
+
+const form = ref({
+	server: settings.navidrome.server || '',
+	username: settings.navidrome.username || '',
+	password: settings.navidrome.password || '',
+	bitrate: settings.navidrome.bitrate ?? 320
+})
+const testing = ref(false)
+const error = ref('')
+
+const themeClass = computed(() => useTheme().themeClass())
+const headerH = computed(() => headerHeight())
+
+function submit() {
+	if (testing.value) return
+	error.value = ''
+	testing.value = true
+	api
+		.testConnection(form.value)
+		.then((info) => {
+			api.connect(form.value)
+			saveSettings()
+			testing.value = false
+			uni.showToast({ title: '连接成功 · ' + (info.version || 'Navidrome'), icon: 'success' })
+			setTimeout(() => {
+				uni.reLaunch({ url: '/pages/index/index' })
+			}, 600)
+		})
+		.catch((e) => {
+			error.value = e.message || '连接失败'
+			testing.value = false
+		})
+}
+</script>
+
+<style scoped>
+.page {
+	height:  100%;
+	background-color: var(--bg);
+}
+.scroll {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+}
+.intro {
+	flex-direction: column;
+	align-items: center;
+	padding: 34px 24px 12px;
+}
+.login-icon {
+	width: 100%;
+	height: 100%;
+}
+.logo {
+	width: 64px;
+	height: 64px;
+	border-radius: 18px;
+	background: linear-gradient(to right, #335eea 0%, #6b8cf3 100%);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 12px 24px -8px rgba(51, 94, 234, 0.6);
+}
+.title {
+	font-size: 21px;
+	font-weight: 600;
+	color: var(--text);
+	margin-top: 18px;
+}
+.desc {
+	font-size: 12px;
+	color: var(--text);
+	opacity: 0.58;
+	line-height: 20px;
+	text-align: center;
+	margin-top: 8px;
+}
+.form {
+	padding: 20px 20px 0;
+}
+.field {
+	margin-bottom: 16px;
+}
+.label {
+	font-size: 12px;
+	font-weight: 400;
+	color: var(--text);
+	opacity: 0.78;
+}
+.input {
+	height: 42px;
+	border-radius: 9px;
+	background-color: var(--secondary-bg);
+	margin-top: 8px;
+	padding: 0 12px;
+	font-size: 14px;
+	color: var(--text);
+}
+.ph {
+	color: var(--text);
+	opacity: 0.4;
+}
+.tip {
+	font-size: 11px;
+	color: var(--text);
+	opacity: 0.45;
+	margin-top: 6px;
+}
+.error {
+	font-size: 12px;
+	color: #e0533d;
+	margin: 4px 0 10px;
+}
+.primary-btn {
+	height: 44px;
+	border-radius: 10px;
+	background-color: var(--primary);
+	color: #ffffff;
+	font-size: 15px;
+	font-weight: 400;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-top: 6px;
+}
+.docker {
+	margin: 34px 20px 40px;
+}
+.docker-desc {
+	font-size: 12px;
+	color: var(--text);
+	opacity: 0.58;
+	line-height: 20px;
+}
+.code {
+	background-color: var(--secondary-bg);
+	border-radius: 10px;
+	padding: 14px;
+	margin-top: 12px;
+	font-size: 11px;
+	line-height: 19px;
+	color: var(--text);
+	opacity: 0.88;
+	white-space: pre-wrap;
+}
+.docker-tip {
+	display: flex;
+	font-size: 11px;
+	color: var(--text);
+	opacity: 0.45;
+	line-height: 18px;
+	margin-top: 10px;
+}
+.primary-label { color: #ffffff; }
+</style>

@@ -1,0 +1,283 @@
+<template>
+	<view class="page" :class="themeClass">
+		<NavHeader :title="playlist.name || '歌单'">
+			<template #right v-if="isReal">
+				<AppIcon name="more" :size="20" :opacity="0.72" @click="showPlaylistMenu" />
+			</template>
+			<template #right>
+				<TrackSelectionButton :tracks="tracks" />
+			</template>
+		</NavHeader>
+		<view :style="{ height: headerH + 'px' }"></view>
+		<scroll-view class="scroll" :show-scrollbar="false" scroll-y :style="{ top: headerH + 'px', bottom: bottomH + 'px' }">
+			<PageState :loading="loading" :error="error" @retry="load">
+				<view class="info">
+					<image
+						v-if="playlist.picUrl"
+						class="cover cover-img"
+						:src="playlist.picUrl"
+						mode="aspectFill"
+					></image>
+					<view v-else class="cover placeholder">
+						<AppIcon name="heart-solid" color="primary" :size="42" :opacity="0.7" />
+					</view>
+					<text class="name">{{ playlist.name }}</text>
+					<text class="meta">歌单 by {{ playlist.creator || 'Navidrome' }}</text>
+					<text class="meta">{{ playlist.trackCount || tracks.length }} 首 · Navidrome 音乐库</text>
+					<text v-if="playlist.description" class="desc" :lines="expanded ? 0 : 2" @click="toggleDesc">
+						{{ playlist.description }}
+					</text>
+					<view class="buttons">
+						<view class="play-all press" @click="playAll">
+							<AppIcon name="play" color="light" :size="16" />
+							<text class="btn-text">播放全部</text>
+						</view>
+						<view class="icon-btn press" @click="shuffleAll">
+							<AppIcon name="shuffle" color="primary" :size="18" />
+						</view>
+					</view>
+				</view>
+				<view class="list">
+					<TrackList :tracks="tracks" :show-album="true" @play="playAt" @more="onTrackMore" />
+				</view>
+			</PageState>
+		</scroll-view>
+		<MiniPlayer :with-nav="false" />
+	</view>
+</template>
+
+<script setup>
+import TrackSelectionButton from '../../components/TrackSelectionButton.uvue'
+import NavHeader from '../../components/NavHeader.uvue'
+import PageState from '../../components/PageState.uvue'
+import TrackList from '../../components/TrackList.uvue'
+import MiniPlayer from '../../components/MiniPlayer.uvue'
+import AppIcon from '../../components/AppIcon.uvue'
+import { headerHeight, miniPlayerClearance } from '../../common/config.js'
+import { player, themeState } from '../../common/store.js'
+import * as api from '../../common/api.js'
+import { enqueueTrack, setQueue } from '../../common/player.js'
+import { showTrackMenu } from '../../common/actions.js'
+import { toast } from '../../common/format.js'
+
+const id = ref('')
+const playlist = ref({})
+const tracks = ref([])
+const loading = ref(true)
+const error = ref('')
+const expanded = ref(false)
+
+const themeClass = computed(() => (themeState.isDark ? 'theme-dark' : 'theme-light'))
+const headerH = computed(() => headerHeight())
+const bottomH = computed(() => miniPlayerClearance(player.visible) + 8)
+const isReal = computed(() => !!id.value && id.value.indexOf('virt:') !== 0)
+
+onLoad((options) => {
+	id.value = decodeURIComponent(options.id || '')
+	if (options.name) playlist.value.name = decodeURIComponent(options.name)
+	load()
+})
+
+function toggleDesc() {
+	expanded.value = !expanded.value
+}
+
+function onTrackMore(e) {
+	const track = e && e.track
+	if (!track) return
+	if (!isReal.value) {
+		showTrackMenu(track)
+		return
+	}
+	uni.showActionSheet({
+		itemList: ['从歌单移除', '添加到我喜欢的音乐', '下一首播放'],
+		success(res) {
+			const i = res.tapIndex
+			if (i === 0) {
+				api
+					.removeFromPlaylist(id.value, e.index, track.id)
+					.then(() => {
+						toast('已从歌单移除')
+						load()
+					})
+					.catch((err) => toast(err.message || '移除失败'))
+			} else if (i === 1) {
+				api
+					.likeTrack(track, true)
+					.then(() => toast('已添加到我喜欢的音乐'))
+					.catch((err) => toast(err.message || '操作失败'))
+			} else if (i === 2) {
+				enqueueTrack(track, true)
+			}
+		}
+	})
+}
+
+function showPlaylistMenu() {
+	uni.showActionSheet({
+		itemList: ['重命名歌单', '删除歌单'],
+		success(res) {
+			if (res.tapIndex === 0) {
+				uni.showModal({
+					title: '重命名歌单',
+					editable: true,
+					content: playlist.value.name || '',
+					placeholderText: '输入歌单名称',
+					success(r) {
+						const name = (r.content || '').trim()
+						if (!r.confirm || !name) return
+						api
+							.renamePlaylist(id.value, name)
+							.then(() => {
+								playlist.value.name = name
+								toast('已重命名')
+							})
+							.catch((e) => toast(e.message || '重命名失败'))
+					}
+				})
+			} else if (res.tapIndex === 1) {
+				uni.showModal({
+					title: '删除歌单',
+					content: '确定删除「' + (playlist.value.name || '这个歌单') + '」吗？此操作不可撤销。',
+					success(r) {
+						if (!r.confirm) return
+						api
+							.deletePlaylist(id.value)
+							.then(() => {
+								toast('已删除歌单')
+								uni.navigateBack()
+							})
+							.catch((e) => toast(e.message || '删除失败'))
+					}
+				})
+			}
+		}
+	})
+}
+
+function load() {
+	loading.value = true
+	error.value = ''
+	api
+		.getPlaylistDetail(id.value)
+		.then((data) => {
+			playlist.value = data.playlist || {}
+			tracks.value = data.tracks || []
+			loading.value = false
+		})
+		.catch((e) => {
+			error.value = e.message || '加载失败'
+			loading.value = false
+		})
+}
+
+function playAll() {
+	setQueue(tracks.value, 0, { name: playlist.value.name, id: id.value, type: 'playlist' })
+}
+
+function shuffleAll() {
+	if (!tracks.value.length) return
+	const order = tracks.value
+		.map((t, i) => ({ i, r: Math.random() }))
+		.sort((a, b) => a.r - b.r)
+		.map((x) => x.i)
+	setQueue(order.map((i) => tracks.value[i]), 0, {
+		name: playlist.value.name,
+		id: id.value,
+		type: 'playlist'
+	})
+	// 随机播放模式由用户通过播放页切换，这里仅打乱队列顺序
+}
+
+function playAt(i) {
+	setQueue(tracks.value, i, { name: playlist.value.name, id: id.value, type: 'playlist' })
+}
+</script>
+
+<style scoped>
+.page {
+	height:  100%;
+	background-color: var(--bg);
+}
+.scroll {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+}
+.info {
+	padding: 24px 20px 20px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	background: linear-gradient(180deg, var(--secondary-bg) 0%, var(--bg) 100%);
+}
+.cover {
+	width: 150px;
+	height: 150px;
+	border-radius: 12px;
+	box-shadow: 0 16px 28px -10px var(--shadow);
+}
+.placeholder {
+	background-color: var(--secondary-bg);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.name {
+	font-size: 22px;
+	font-weight: 600;
+	color: var(--text);
+	text-align: center;
+	margin-top: 20px;
+	line-height: 30px;
+}
+.meta {
+	font-size: 12px;
+	color: var(--text);
+	opacity: 0.58;
+	text-align: center;
+	margin-top: 5px;
+}
+.desc {
+	font-size: 12px;
+	color: var(--text);
+	opacity: 0.58;
+	text-align: center;
+	line-height: 19px;
+	margin-top: 12px;
+}
+.buttons {
+	flex-direction: row;
+	align-items: center;
+	margin-top: 22px;
+}
+.play-all {
+	height: 40px;
+	padding: 0 22px;
+	border-radius: 8px;
+	background-color: var(--primary);
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+}
+.btn-text {
+	color: #ffffff;
+	font-size: 14px;
+	font-weight: 400;
+	margin-left: 8px;
+}
+.icon-btn {
+	width: 40px;
+	height: 40px;
+	border-radius: 8px;
+	background-color: var(--primary-bg);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-left: 12px;
+}
+.list {
+	padding: 8px 16px 20px;
+}
+</style>

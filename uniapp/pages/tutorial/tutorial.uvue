@@ -1,0 +1,80 @@
+<template>
+	<view class="page" :class="themeState.isDark ? 'theme-dark' : 'theme-light'">
+		<NavHeader title="Navidrome 部署教程" />
+		<view :style="{ height: headerHeight() + 'px' }"></view>
+		<scroll-view class="scroll" direction="vertical">
+			<view class="content" :style="{ paddingBottom: 24 + safeBottom() + 'px' }">
+				<text class="body">1. 保存 compose.yml，把音乐放进同级的 music 文件夹。</text>
+				<text class="body">2. 运行 docker compose up -d，打开 Navidrome 网页创建管理员账号。</text>
+				<text class="body">3. 在 FreeMusic 设置中填写 Navidrome 地址和账号。</text>
+				<view class="section-head">
+					<text class="section-title">Compose 配置</text>
+					<text class="action" @click="copyCompose">复制配置</text>
+				</view>
+				<view class="code-card">
+					<text class="code" :selectable="true">{{ compose }}</text>
+				</view>
+				<view class="file-row press" @click="shareCompose">
+					<AppIcon name="share" color="primary" :size="23" />
+					<view class="file-info">
+						<text class="file-name">compose.yml</text>
+						<text class="file-caption">通过 Android 分享文件</text>
+					</view>
+					<AppIcon name="arrow-right" :size="17" :opacity="0.5" />
+				</view>
+			</view>
+		</scroll-view>
+	</view>
+</template>
+
+<script setup>
+import AppIcon from '../../components/AppIcon.uvue'
+import NavHeader from '../../components/NavHeader.uvue'
+import { headerHeight, safeBottom } from '../../common/config.js'
+import { toast } from '../../common/format.js'
+import { themeState } from '../../common/store.js'
+// #ifdef APP-ANDROID
+import { copyComposeText, shareComposeFile } from '../../uni_modules/freemusic-compose-share'
+// #endif
+
+const compose = `services:
+  navidrome:
+    image: navidrome/navidrome:latest
+    ports:
+      - "4533:4533"
+    environment:
+      ND_SCANSCHEDULE: "1h"
+    volumes:
+      - "./data:/data"
+      - "./music:/music:ro"
+    restart: unless-stopped
+`
+
+function copyCompose() {
+	// #ifdef APP-ANDROID
+	toast(copyComposeText(compose) ? '已复制 Compose 配置' : '复制失败，请长按配置文本')
+	// #endif
+}
+
+function shareCompose() {
+	// #ifdef APP-ANDROID
+	if (!shareComposeFile(compose)) toast('无法打开文件分享')
+	// #endif
+}
+</script>
+
+<style scoped>
+.page { flex: 1; background-color: var(--bg); }
+.scroll { flex: 1; }
+.content { padding: 20px 20px 24px; }
+.body { font-size: 14px; line-height: 23px; color: var(--text); opacity: 0.74; margin-bottom: 10px; }
+.section-head { flex-direction: row; justify-content: space-between; align-items: center; margin-top: 12px; }
+.section-title { font-size: 16px; font-weight: 600; color: var(--text); }
+.action { font-size: 13px; color: var(--primary); padding: 10px 4px; }
+.code-card { padding: 14px; border-radius: 12px; background-color: var(--secondary-bg); margin-bottom: 12px; }
+.code { font-family: monospace; font-size: 12px; line-height: 20px; color: var(--text); }
+.file-row { flex-direction: row; align-items: center; padding: 14px; border-radius: 12px; background-color: var(--secondary-bg); margin-top: 6px; }
+.file-info { flex: 1; min-width: 0; margin-left: 12px; }
+.file-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.file-caption { font-size: 12px; color: var(--text); opacity: 0.62; margin-top: 3px; }
+</style>

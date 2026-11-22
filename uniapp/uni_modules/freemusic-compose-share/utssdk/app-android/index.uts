@@ -1,0 +1,12 @@
+import ComposeShare from 'uts.sdk.modules.freemusicComposeShare.ComposeShare'
+import { UTSAndroid } from 'io.dcloud.uts'
+
+export function copyComposeText(text: string): boolean {
+	const context = UTSAndroid.getAppContext()
+	return context != null && ComposeShare.copyText(context, text)
+}
+
+export function shareComposeFile(text: string): boolean {
+	const activity = UTSAndroid.getUniActivity()
+	return activity != null && ComposeShare.shareFile(activity, text)
+}

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 后台音频播放前台服务权限：Android 14(API 34)+ 强制要求，缺失会导致播放时 startForeground 崩溃 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <application
+        android:name=".FreeMusicApplication"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="FreeMusic"
+        android:theme="@style/Theme.AppCompat.DayNight"
+        android:extractNativeLibs="false"
+        android:usesCleartextTraffic="true"
+        tools:replace="android:name,android:allowBackup,android:theme">
+        <meta-data android:name="com.gy.freemusic.ABI" android:value="${freeMusicAbi}" />
+        <meta-data android:name="com.gy.freemusic.GITHUB_REPOSITORY" android:value="${freeMusicRepository}" />
+        <provider
+            android:name="uts.sdk.modules.freemusicComposeShare.ComposeFileProvider"
+            android:authorities="${applicationId}.composefiles"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/compose_share_paths" />
+        </provider>
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

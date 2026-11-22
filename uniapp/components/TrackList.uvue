@@ -1,0 +1,212 @@
+<template>
+	<view class="track-list">
+		<view v-if="selecting" class="batch-bar">
+			<text class="batch-count">已选 {{ selectedTracks.length }} 首</text>
+			<text class="batch-button" :class="{ 'batch-disabled': !selectedTracks.length }" @click="addSelectedToPlaylist">加入歌单</text>
+			<text class="batch-button" :class="{ 'batch-disabled': !selectedTracks.length }" @click="queueSelected">加入待播队列</text>
+		</view>
+		<view
+			v-for="(track, i) in props.tracks"
+			:key="track.id + '-' + i"
+			class="track"
+			@click="selecting ? toggleTrack(track.id) : emit('play', i)"
+		>
+			<view class="no">
+				<AppIcon v-if="selecting" :name="selectedIds.includes(track.id) ? 'checkbox-checked' : 'checkbox'" :color="selectedIds.includes(track.id) ? 'primary' : 'text'" :size="17" />
+				<text v-else-if="!isPlaying(track)" class="no-text">{{ i + 1 }}</text>
+				<view v-else class="bars">
+					<view class="bar b1"></view>
+					<view class="bar b2"></view>
+					<view class="bar b3"></view>
+				</view>
+			</view>
+			<CoverImage v-if="track.picUrl" class="cover" :src="track.thumbUrl || track.picUrl" />
+			<view v-else class="cover placeholder"><AppIcon name="music-note" color="primary" :size="19" :opacity="0.65" /></view>
+			<view class="mid">
+				<text class="name" :max-lines="2">{{ track.name }}</text>
+				<text class="sub ellipsis" :max-lines="1">
+					{{ track.artistName }}{{ props.showAlbum && track.album && track.album.name ? ' - ' + track.album.name : '' }}
+				</text>
+			</view>
+			<view v-if="!selecting" class="track-action" @click.stop="like(track)">
+				<AppIcon :name="isLiked(track.id) ? 'heart-solid' : 'heart'" :color="isLiked(track.id) ? 'primary' : 'text'" :opacity="isLiked(track.id) ? 1 : 0.55" :size="18" />
+			</view>
+			<view v-if="!selecting" class="track-action" @click.stop="emit('more', { track, index: i })">
+				<AppIcon name="more" :size="18" :opacity="0.62" />
+			</view>
+		</view>
+		<view v-if="props.footerText || (props.showEnd && props.tracks.length)" class="list-end" @click="emit('footer')">
+			<text class="list-end-label">{{ props.footerText || '没有更多了' }}</text>
+		</view>
+	</view>
+</template>
+
+<script setup>
+import { computed, ref } from 'vue'
+import AppIcon from './AppIcon.uvue'
+import CoverImage from './CoverImage.uvue'
+import { player, isLiked } from '../common/store.js'
+import { currentTrack, enqueueTracks } from '../common/player.js'
+import { choosePlaylistForTracks } from '../common/actions.js'
+import * as api from '../common/api.js'
+import { toast } from '../common/format.js'
+
+const props = defineProps({
+	tracks: { type: Array, default: () => [] },
+	showEnd: { type: Boolean, default: true },
+	footerText: { type: String, default: '' },
+	selectionMode: { type: Boolean, default: false },
+	showAlbum: { type: Boolean, default: false }
+})
+const emit = defineEmits(['play', 'more', 'footer'])
+const selecting = computed(() => props.selectionMode)
+const selectedIds = ref([])
+const selectedTracks = computed(() => {
+	const tracksById = new Map(props.tracks.map((track) => [track.id, track]))
+	return selectedIds.value.map((id) => tracksById.get(id)).filter(Boolean)
+})
+
+function toggleTrack(id) {
+	selectedIds.value = selectedIds.value.includes(id)
+		? selectedIds.value.filter((item) => item !== id)
+		: [...selectedIds.value, id]
+}
+
+function addSelectedToPlaylist() {
+	if (selectedTracks.value.length) choosePlaylistForTracks(selectedTracks.value)
+}
+
+function queueSelected() {
+	if (!selectedTracks.value.length) return
+	enqueueTracks(selectedTracks.value)
+	uni.navigateBack()
+}
+
+function isPlaying(track) {
+	const cur = currentTrack()
+	return !!(cur && cur.id === track.id && player.playing)
+}
+
+function like(track) {
+	const next = !isLiked(track.id)
+	api
+		.likeTrack(track, next)
+		.then(() => toast(next ? '已喜欢' : '已取消喜欢'))
+		.catch((e) => toast(e.message || '操作失败'))
+}
+</script>
+
+<style scoped>
+.track-list {
+	display: flex;
+	flex-direction: column;
+}
+.list-end {
+	align-items: center;
+	padding: 18px 0;
+}
+.list-end-label {
+	font-size: 12px;
+	color: var(--text);
+	opacity: 0.5;
+}
+.batch-bar {
+	flex-direction: row;
+	align-items: center;
+}
+.batch-button {
+	padding: 8px 10px;
+	color: var(--primary);
+	font-size: 13px;
+}
+.batch-count {
+	color: var(--text);
+	font-size: 12px;
+}
+.batch-disabled {
+	opacity: 0.4;
+}
+.track {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	height: 62px;
+}
+.no {
+	width: 28px;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.no-text {
+	font-size: 13px;
+	font-weight: 400;
+	color: var(--text);
+	opacity: 0.58;
+}
+.bars {
+	flex-direction: row;
+	height: 14px;
+	align-items: flex-end;
+}
+.bar {
+	width: 2px;
+	background-color: var(--primary);
+	margin: 0 1px;
+	animation: bounce 0.9s ease-in-out infinite alternate;
+}
+.b1 { height: 8px; animation-delay: 0s; }
+.b2 { height: 14px; animation-delay: 0.25s; }
+.b3 { height: 6px; animation-delay: 0.5s; }
+@keyframes bounce {
+	from { transform: scaleY(0.4); }
+	to { transform: scaleY(1); }
+}
+.cover {
+	width: 44px;
+	height: 44px;
+	flex-shrink: 0;
+	border-radius: 8px;
+	margin-right: 12px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: var(--separator);
+}
+.placeholder {
+	background-color: var(--secondary-bg);
+	align-items: center;
+	justify-content: center;
+}
+.mid {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	width: 0;
+	min-width: 0;
+	overflow: hidden;
+}
+.name {
+	width: 100%;
+	text-overflow: ellipsis;
+	font-size: 14px;
+	font-weight: 400;
+	opacity: 0.88;
+	color: var(--text);
+	line-height: 20px;
+}
+.sub {
+	font-size: 11px;
+	opacity: 0.58;
+	color: var(--text);
+	line-height: 16px;
+	margin-top: 2px;
+}
+.track-action {
+	width: 38px;
+	height: 44px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+}
+</style>

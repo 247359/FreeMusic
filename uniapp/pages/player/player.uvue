@@ -1,0 +1,1136 @@
+<template>
+	<view class="player-page" :class="themeClass" :style="{ paddingBottom: bottomInset }">
+		<!-- 封面背景 -->
+		<view class="bg" :style="{ opacity: settings.lyricsBackground ? 0.55 : 0 }">
+			<CoverImage v-if="cover" class="bg-img" :src="cover" fallback="" />
+			<view class="bg-mask"></view>
+		</view>
+
+		<view class="top" :style="{ paddingTop: statusBar + 'px', height: statusBar + 48 + 'px' }">
+			<view class="top-btn" @click="close"><AppIcon name="arrow-down" :size="24" /></view>
+			<view class="top-title">
+				<text class="t1 ellipsis">{{ player.meta && player.meta.name ? player.meta.name : '正在播放' }}</text>
+				<text class="t2">{{ player.queue.length }} 首歌曲</text>
+			</view>
+			<view class="top-btn"></view>
+		</view>
+
+		<view v-if="mediaVolume >= 0" class="volume-row">
+			<AppIcon name="volume" :size="18" :opacity="0.7" />
+			<slider class="volume-slider" :value="mediaVolume" :min="0" :max="100"
+				:block-size="12" activeColor="#335eea" backgroundColor="#c5c9d4"
+				@change="changeMediaVolume" />
+		</view>
+		<view class="main">
+			<!-- 封面 / 歌词 切换 -->
+			<view
+				v-if="!showLyrics"
+				class="cover-area"
+				@click="coverTap"
+				@touchstart="coverTouchStart"
+				@touchmove="coverTouchMove"
+				@touchend="coverTouchEnd"
+				@touchcancel="swiping = false"
+			>
+				<view class="art-frame" :style="{ width: coverSize + sleeveInset * 2 + 'px', height: coverSize + 'px' }">
+					<view class="record" :style="recordStyle">
+						<view class="record-face" :class="{ 'record-spinning': player.playing }">
+							<view class="record-groove groove-outer"></view>
+							<view class="record-groove groove-inner"></view>
+							<view class="record-label"><view class="record-hole"></view></view>
+							<view class="record-mark record-mark-leading"></view>
+							<view class="record-mark record-mark-opposite"></view>
+						</view>
+					</view>
+					<view class="art-sleeve" :style="sleeveStyle">
+						<CoverImage v-if="cover" class="cover" :src="cover" mode="aspectFill" />
+						<view v-else class="cover placeholder">
+							<AppIcon name="music-note" color="primary" :size="52" :opacity="0.65" />
+						</view>
+					</view>
+				</view>
+				<view v-if="hasLyricPreview" :key="current?.id" class="lyric-teaser press" @click.stop="showLyrics = true">
+					<view v-for="row in previewRows" :key="row.index" class="teaser-row"
+						:style="{ transform: 'translateY(' + ((row.position + 1) * 26) + 'px)', opacity: row.position === 0 ? 0.94 : 0.52 }">
+						<text class="teaser-text" :class="{ 'teaser-current': row.position === 0 }" :max-lines="1">{{ row.content }}</text>
+					</view>
+				</view>
+			</view>
+			<view v-else class="lyric-pane">
+			<scroll-view v-if="lyricLines.length"
+				class="lyrics"
+				:show-scrollbar="false" scroll-y
+				:scroll-top="lyricScrollTop"
+				scroll-with-animation
+				@touchstart="startLyricScroll"
+				@touchend="finishLyricScroll"
+				@touchcancel="finishLyricScroll"
+				@scroll="onLyricScroll"
+			>
+				<view :style="{ paddingTop: lyricPadding + 'px', paddingBottom: lyricPadding + 'px' }" @click="tapLyrics">
+					<view
+						v-for="(line, i) in lyricLines"
+						:id="'line-' + i"
+						:key="'l' + i"
+						class="lyric-line"
+						:style="{ height: lyricRowHeight + 'px', opacity: i === lyricIndex ? 1 : 0.38 }"
+					><text class="lyric-text" :style="{ fontSize: settings.lyricFontSize + 'px', color: i === lyricIndex ? 'var(--primary)' : 'var(--text)', fontWeight: i === lyricIndex ? '600' : '400' }">{{ line.content }}</text>
+						<text v-if="settings.showTranslation && !!line.translation" class="lyric-trans">{{ line.translation }}</text>
+					</view>
+				</view>
+			</scroll-view>
+				<view v-else class="no-lyric-center" @click="showLyrics = false">
+					<text class="no-lyric">{{ lyrics.mismatch ? '服务器歌词与当前歌曲不匹配' : '暂无歌词' }}</text>
+				</view>
+				<view v-if="lyricLines.length" class="lyric-fade lyric-fade-top"></view>
+				<view v-if="lyricLines.length" class="lyric-fade lyric-fade-bottom"></view>
+				<view v-if="lyricPreviewTime >= 0" class="lyric-marker">
+					<text class="lyric-marker-time">{{ fmtTime(lyricPreviewTime) }}</text>
+				</view>
+			</view>
+
+			<!-- 歌曲信息 -->
+			<view class="track">
+				<text class="name ellipsis">{{ current && current.name }}</text>
+				<view class="artist-row">
+					<text class="artist ellipsis">{{ current && current.artistName }}</text>
+					<AppIcon
+						:name="liked ? 'heart-solid' : 'heart'"
+						:color="liked ? 'primary' : 'text'"
+						:opacity="liked ? 1 : 0.62"
+						:size="19"
+						@click="like"
+					/>
+				</view>
+				<text v-if="current && current.album && current.album.name" class="album-caption ellipsis">{{ current.album.name }}</text>
+				<view class="rating-row">
+					<view
+						v-for="s in stars"
+						:key="'star' + s"
+						class="star"
+						@click="rate(s)"
+					>
+						<AppIcon :name="s <= rating ? 'star-solid' : 'star'" :color="s <= rating ? 'primary' : 'text'" :opacity="s <= rating ? 1 : 0.4" :size="16" />
+					</view>
+				</view>
+			</view>
+
+			<slider
+				class="progress"
+				:min="0"
+				:max="Math.max(1, Math.ceil(displayDuration))"
+				:value="displayDuration > 0 ? Math.floor(Math.min(displayTime, displayDuration)) : 0"
+				:disabled="displayDuration <= 0"
+				track-class="seek-track"
+				track-active-class="seek-fill"
+				thumb-class="seek-thumb"
+				@changing="previewProgress"
+				@change="commitProgress"
+				@touchcancel="cancelProgress"
+			/>
+			<view class="times">
+				<text class="time-text">{{ fmtTime(displayTime) }}</text>
+				<text class="time-text">{{ displayDuration > 0 ? fmtTime(displayDuration) : '—:—' }}</text>
+			</view>
+
+			<!-- 控制区 -->
+			<view class="controls">
+				<AppIcon :name="modeIcon" color="text" :size="21" :opacity="0.7" @click="changeMode" />
+				<AppIcon name="previous" :size="30" @click="prev" />
+				<view class="play-btn press" @click="toggle">
+					<AppIcon :name="player.playing ? 'pause' : 'play'" color="light" :size="26" />
+				</view>
+			<AppIcon name="next" :size="30" @click="doNext" />
+			<AppIcon name="more" :size="21" :opacity="0.7" @click="showTools" />
+		</view>
+
+			<view class="bottom-row" :style="{ height: BOTTOM_BAR_HEIGHT + 'px' }">
+				<AppIcon
+					name="list"
+					:size="19"
+					:opacity="0.55"
+					@click="showQueue = true"
+				/>
+				<view class="lyrics-button" :class="{ 'lyrics-button-on': showLyrics }" @click="showLyrics = !showLyrics">
+					<text class="lyrics-button-label" :class="{ 'lyrics-available': lyricLines.length > 0 }">词</text>
+				</view>
+				<AppIcon
+					name="fm"
+					:size="19"
+					:opacity="0.55"
+					@click="fm"
+				/>
+			</view>
+		</view>
+
+		<QueueSheet
+			:show="showQueue"
+			@close="showQueue = false"
+			@play="playQueueAt"
+			@remove="removeAt"
+		/>
+
+		<!-- 歌曲信息面板 -->
+		<view v-if="showInfo" class="info-mask" @click="showInfo = false">
+			<view class="info-card" :style="{ maxHeight: infoMaxH + 'px' }" @click.stop>
+				<view class="info-head">
+					<text class="info-title">歌曲信息</text>
+					<AppIcon name="x" :size="18" :opacity="0.5" @click="showInfo = false" />
+				</view>
+				<view class="info-body">
+					<view class="info-row">
+						<text class="info-k">标题</text>
+						<text class="info-v">{{ infoDetail && infoDetail.name ? infoDetail.name : '-' }}</text>
+					</view>
+					<view class="info-row">
+						<text class="info-k">艺术家</text>
+						<text class="info-v">{{ infoDetail && infoDetail.artistName ? infoDetail.artistName : '-' }}</text>
+					</view>
+					<view class="info-row">
+						<text class="info-k">专辑</text>
+						<text class="info-v">{{ infoDetail && infoDetail.album && infoDetail.album.name ? infoDetail.album.name : '-' }}</text>
+					</view>
+					<view class="info-row">
+						<text class="info-k">格式</text>
+						<text class="info-v">{{ fmtFormat(infoDetail) }}</text>
+					</view>
+					<view class="info-row">
+						<text class="info-k">源文件码率</text>
+						<text class="info-v">{{ fmtBitrate(infoDetail) }}</text>
+					</view>
+					<view class="info-row">
+						<text class="info-k">时长</text>
+						<text class="info-v">{{ fmtTime(infoDetail ? infoDetail.duration : 0) }}</text>
+					</view>
+					<view class="info-row">
+						<text class="info-k">大小</text>
+						<text class="info-v">{{ fmtSize(infoDetail) }}</text>
+					</view>
+					<view class="info-row">
+						<text class="info-k">播放次数</text>
+						<text class="info-v">{{ infoDetail && infoDetail.extra ? (infoDetail.extra.playCount || 0) : 0 }}</text>
+					</view>
+					<view v-if="infoDetail && !!infoDetail.extra && !!infoDetail.extra.path" class="info-row col">
+						<text class="info-k">路径</text>
+						<text class="info-path">{{ infoDetail.extra.path }}</text>
+					</view>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup>
+import AppIcon from '../../components/AppIcon.uvue'
+import CoverImage from '../../components/CoverImage.uvue'
+import QueueSheet from '../../components/QueueSheet.uvue'
+import { BOTTOM_BAR_HEIGHT, PLAYBACK_RATES, currentWindowHeight, refreshSafeArea, safeBottom, statusBarHeight, windowWidth, windowHeight } from '../../common/config.js'
+import { touchPoint } from '../../common/swipe.js'
+import { player, settings, useTheme, isLiked, getRating, setLocalRating, syncRating } from '../../common/store.js'
+import {
+	currentTrack,
+	toggle,
+	next,
+	prev,
+	setMode,
+	seekTo,
+	beginDrag,
+	endDrag,
+	toggleLike,
+	startFM,
+	playAt,
+	removeFromQueue,
+	setRate,
+	setSleepTimer,
+	clearSleepTimer
+} from '../../common/player.js'
+import { getTrackLyricOffset, setTrackLyricOffset } from '../../common/store.js'
+import * as api from '../../common/api.js'
+import { lyricIndexAt, lyricPreviewRows } from '../../common/lyrics.js'
+import { fmtTime, fmtBitrate, toast } from '../../common/format.js'
+// #ifdef APP-ANDROID
+import { getMediaVolume, setMediaVolume } from '../../uni_modules/freemusic-media-volume'
+// #endif
+
+const mediaVolume = ref(-1)
+let volumeTimer = null
+
+function refreshMediaVolume() {
+	// #ifdef APP-ANDROID
+	mediaVolume.value = getMediaVolume()
+	// #endif
+}
+
+function changeMediaVolume(event) {
+	// #ifdef APP-ANDROID
+	mediaVolume.value = setMediaVolume(Number(event.detail.value))
+	// #endif
+}
+
+const showLyrics = ref(false)
+const showQueue = ref(false)
+const showInfo = ref(false)
+const infoDetail = ref(null)
+const rating = ref(0)
+const stars = [1, 2, 3, 4, 5]
+const infoMaxH = Math.round((windowHeight > 200 ? windowHeight : 667) * 0.72)
+// 封面上/下滑或点击手势：左右滑切歌，轻点切歌词
+const swipeStartX = ref(0)
+const swipeStartY = ref(0)
+const swiping = ref(false)
+let lastCoverSwipe = 0
+const lyrics = ref({ lyric: [], tlyric: [] })
+const lyricTrackId = ref('')
+const dragging = ref(false)
+const dragSec = ref(0)
+
+const themeClass = computed(() => useTheme().themeClass())
+const statusBar = computed(() => statusBarHeight())
+const bottomInset = computed(() => safeBottom() + 'px')
+const current = computed(() => currentTrack())
+const cover = computed(() => current.value ? current.value.picUrl : '')
+const liked = computed(() => current.value ? isLiked(current.value.id) : false)
+const displayTime = computed(() => dragging.value ? dragSec.value : player.currentTime)
+const displayDuration = computed(() => Math.max(0, player.duration > 0 ? player.duration : Number(current.value && current.value.duration) || 0))
+const modeIcon = computed(() => ({ order: 'sort-up', repeat: 'repeat', shuffle: 'shuffle', one: 'repeat-1' })[player.mode])
+const lyricLines = computed(() => {
+	const all = lyrics.value.lyric || []
+	const trans = lyrics.value.tlyric || []
+	// 将译文按时间对齐到主歌词
+	const transMap = {}
+	trans.forEach((l) => {
+		if (l.time >= 0 && l.content) transMap[l.time.toFixed(2)] = l.content
+	})
+	const timed = all
+		.filter((l) => l.time >= 0)
+		.map((l) => ({ time: l.time, content: l.content, translation: transMap[l.time.toFixed(2)] || '' }))
+	return timed.length ? timed : all.map((l) => ({ time: l.time, content: l.content, translation: '' }))
+})
+const lyricOffset = computed(() => getTrackLyricOffset(current.value?.id))
+const lyricIndex = computed(() => lyricIndexAt(lyricLines.value, player.currentTime + lyricOffset.value))
+const previewRows = computed(() => lyricPreviewRows(lyricLines.value, lyricIndex.value))
+const hasLyricPreview = computed(() => lyricLines.value.some((line) => line.content))
+const lyricRowHeight = computed(() => Math.max(48, Math.ceil(settings.lyricFontSize * 1.55) + (settings.showTranslation ? 24 : 12)))
+const lyricPadding = ref(0)
+const lyricScrollTop = ref(0)
+const lyricPreviewTime = ref(-1)
+let lyricTouching = false
+let lyricMoved = false
+let lyricSeekTimer = null
+let lastLyricScroll = 0
+
+watch(lyricIndex, (index) => {
+	if (showLyrics.value && !lyricTouching && lyricPreviewTime.value < 0) {
+		lyricScrollTop.value = Math.max(0, index) * lyricRowHeight.value
+	}
+})
+watch(showLyrics, (open) => {
+	if (!open) return
+	nextTick(() => {
+		uni.createSelectorQuery().select('.lyric-pane').boundingClientRect((rect) => {
+			if (rect) lyricPadding.value = Math.max(0, (rect.height - lyricRowHeight.value) / 2)
+			lyricScrollTop.value = Math.max(0, lyricIndex.value) * lyricRowHeight.value
+		}).exec()
+	})
+})
+
+function startLyricScroll() {
+	lyricTouching = true
+	lyricMoved = false
+	if (lyricSeekTimer) clearTimeout(lyricSeekTimer)
+}
+function finishLyricScroll() {
+	lyricTouching = false
+	if (lyricMoved && lyricPreviewTime.value >= 0) scheduleLyricSeek()
+}
+function onLyricScroll(e) {
+	if (!lyricTouching && lyricPreviewTime.value < 0) return
+	const index = Math.max(0, Math.min(lyricLines.value.length - 1, Math.round(e.detail.scrollTop / lyricRowHeight.value)))
+	const line = lyricLines.value[index]
+	if (!line || line.time < 0) return
+	lyricMoved = true
+	lastLyricScroll = Date.now()
+	lyricPreviewTime.value = line.time
+	if (!lyricTouching) scheduleLyricSeek()
+}
+function scheduleLyricSeek() {
+	if (lyricSeekTimer) clearTimeout(lyricSeekTimer)
+	lyricSeekTimer = setTimeout(() => {
+		const time = lyricPreviewTime.value
+		lyricPreviewTime.value = -1
+		if (time >= 0 && showLyrics.value) seekLyric({ time })
+	}, 240)
+}
+function tapLyrics() {
+	if (lyricPreviewTime.value < 0 && Date.now() - lastLyricScroll > 350) showLyrics.value = false
+}
+const coverSize = computed(() => {
+	// 宽度优先，再用可视高度兜底：小屏自动缩小封面，保证进度/控制区不被裁掉
+	const byWidth = Math.floor((windowWidth - 48) / 1.6)
+	const teaserHeight = hasLyricPreview.value ? 114 : 0
+	const availH = currentWindowHeight() - statusBarHeight() - safeBottom() - 48 - (mediaVolume.value >= 0 ? 34 : 0) - 330 - teaserHeight
+	return Math.round(Math.max(120, Math.min(byWidth, 300, availH)))
+})
+const sleeveInset = computed(() => Math.round(coverSize.value * 0.29))
+const recordStyle = computed(() => {
+	const size = coverSize.value
+	const diameter = Math.round(size * 0.92)
+	const inset = (size - diameter) / 2
+	return {
+		width: diameter + 'px',
+		height: diameter + 'px',
+		left: inset + sleeveInset.value + 'px',
+		top: inset + 'px',
+		transform: 'translateX(' + (player.playing ? Math.round(size * 0.29) : 0) + 'px)'
+	}
+})
+const sleeveStyle = computed(() => ({
+	width: coverSize.value + 'px',
+	left: sleeveInset.value + 'px',
+	transform: 'translateX(' + (player.playing ? -Math.round(coverSize.value * 0.17) : 0) + 'px)'
+}))
+
+watch(current, (track) => {
+	if (lyricSeekTimer) clearTimeout(lyricSeekTimer)
+	lyricPreviewTime.value = -1
+	// 队列被清空后当前曲消失，自动退出播放页，避免停留在无内容的空壳页
+	if (!track) {
+		uni.navigateBack()
+		return
+	}
+	loadLyrics()
+	loadRating()
+	infoDetail.value = null
+})
+
+// 首次进入时加载歌词与评分（onPageShow 已负责无歌退出的场景）
+loadLyrics()
+loadRating()
+
+onPageShow(() => {
+	refreshSafeArea()
+	if (!currentTrack()) {
+		toast('请先选择一首歌曲')
+		uni.navigateBack()
+	}
+})
+
+onReady(refreshSafeArea)
+onShow(() => {
+	stopVolumeSync()
+	refreshMediaVolume()
+	if (mediaVolume.value >= 0) volumeTimer = setInterval(refreshMediaVolume, 300)
+})
+onHide(stopVolumeSync)
+onResize(refreshSafeArea)
+
+function stopVolumeSync() {
+	if (volumeTimer != null) clearInterval(volumeTimer)
+	volumeTimer = null
+}
+
+onUnload(() => {
+	stopVolumeSync()
+	if (lyricSeekTimer) clearTimeout(lyricSeekTimer)
+	if (dragging.value) endDrag()
+})
+
+function loadLyrics() {
+	const track = currentTrack()
+	if (!track || track.id === lyricTrackId.value) return
+	lyricTrackId.value = track.id
+	lyrics.value = { lyric: [], tlyric: [] }
+	api
+		.getLyrics(track)
+		.then((data) => {
+			if (currentTrack() && currentTrack().id === track.id) lyrics.value = data
+		})
+		.catch(() => {})
+}
+
+function seekLyric(line) {
+	const t = line.time - lyricOffset.value
+	if (line.time >= 0) seekTo(Math.max(0, t))
+}
+
+/* 封面区手势：左滑下一首 / 右滑上一首 / 轻点查看歌词 */
+function coverTouchStart(e) {
+	const t = touchPoint(e)
+	if (!t) return
+	swipeStartX.value = t.x
+	swipeStartY.value = t.y
+	swiping.value = false
+}
+
+function coverTouchMove(e) {
+	const t = touchPoint(e)
+	if (!t) return
+	const dx = t.x - swipeStartX.value
+	const dy = t.y - swipeStartY.value
+	if (!swiping.value && Math.abs(dx) > 14 && Math.abs(dx) > Math.abs(dy)) {
+		swiping.value = true
+	}
+}
+
+function coverTouchEnd(e) {
+	const t = touchPoint(e)
+	const dx = t ? t.x - swipeStartX.value : 0
+	const dy = t ? t.y - swipeStartY.value : 0
+	if (swiping.value) {
+		lastCoverSwipe = Date.now()
+		if (dx <= -70) next()
+		else if (dx >= 70) prev()
+	} else if (Math.abs(dx) < 12 && Math.abs(dy) < 12) {
+		showLyrics.value = true
+	}
+	swiping.value = false
+}
+
+/** 轻点封面同样切歌词；滑动手势已处理时由 swiping 标记避免重复触发 */
+function coverTap() {
+	if (swiping.value || Date.now() - lastCoverSwipe < 350) return
+	showLyrics.value = true
+}
+
+function fmtFormat(track) {
+	if (!track) return '-'
+	const e = track.extra || {}
+	const suffix = (e.suffix || '').toUpperCase()
+	if (!suffix) return '未知'
+	const parts = [suffix]
+	if (e.bitDepth) parts.push(e.bitDepth + 'bit')
+	if (e.sampleRate) parts.push((e.sampleRate / 1000).toFixed(1) + 'kHz')
+	if (e.channelCount) parts.push(e.channelCount === 1 ? '单声道' : '立体声')
+	return parts.join(' · ')
+}
+
+function fmtSize(track) {
+	const e = (track && track.extra) || {}
+	const size = Number(e.size || 0)
+	if (!size) return '-'
+	if (size < 1024 * 1024) return (size / 1024).toFixed(0) + ' KB'
+	return (size / 1024 / 1024).toFixed(1) + ' MB'
+}
+
+/** 载入当前曲评分（优先本地缓存，回落到服务端 userRating） */
+function loadRating() {
+	const track = currentTrack()
+	if (!track) { rating.value = 0; return }
+	rating.value = getRating(track.id)
+	if (track.userRating) syncRating(track.id, track.userRating)
+	if (!rating.value && track.userRating) rating.value = Number(track.userRating)
+}
+
+/** 点击第 n 颗星：与当前相同则清除（0），否则设为 n */
+function rate(n) {
+	const track = currentTrack()
+	if (!track) return
+	const next = rating.value === n ? 0 : n
+	rating.value = next
+	setLocalRating(track.id, next)
+	api.setRating(track.id, next).catch(() => {
+		// 服务端失败时回滚
+		rating.value = getRating(track.id)
+		toast('评分保存失败')
+	})
+}
+
+/** 打开歌曲信息面板：拉取完整字段 */
+function showSongInfo() {
+	const track = currentTrack()
+	if (!track) return
+	infoDetail.value = track
+	showInfo.value = true
+	api.getSong(track.id)
+		.then((full) => {
+			if (full) infoDetail.value = full
+		})
+		.catch(() => {})
+}
+
+function changeMode() {
+	setMode()
+}
+
+/** 播放工具菜单：倍速 / 睡眠定时 / 歌词时间轴微调 */
+function showTools() {
+	const sleepText = player.sleepRemaining > 0
+		? '睡眠定时 · 剩 ' + Math.ceil(player.sleepRemaining / 60) + ' 分钟'
+		: player.sleepAtEnd
+		? '睡眠定时 · 本曲结束'
+		: '睡眠定时'
+	uni.showActionSheet({
+		itemList: [
+			'歌曲信息',
+			'播放速度 (' + (player.rate || 1) + 'x)',
+			sleepText,
+			'清除定时',
+			...(lyricLines.value[0]?.time >= 0 ? ['本曲歌词偏移 (' + lyricOffset.value + 's)'] : [])
+		],
+		success(res) {
+			const i = res.tapIndex
+			if (i === 0) showSongInfo()
+			else if (i === 1) pickRate()
+			else if (i === 2) pickSleep()
+			else if (i === 3) { clearSleepTimer(); toast('已清除定时') }
+			else if (i === 4) pickLyricOffset()
+		}
+	})
+}
+
+function pickRate() {
+	uni.showActionSheet({
+		itemList: PLAYBACK_RATES.map((rate) => rate === 1 ? '1x 正常' : rate + 'x'),
+		success(res) {
+			setRate(PLAYBACK_RATES[res.tapIndex] || 1)
+		}
+	})
+}
+
+function pickSleep() {
+	uni.showActionSheet({
+		itemList: ['15 分钟', '30 分钟', '45 分钟', '60 分钟', '90 分钟', '本曲播放结束'],
+		success(res) {
+			const mins = [15, 30, 45, 60, 90]
+			if (res.tapIndex === 5) setSleepTimer(0, true)
+			else setSleepTimer(mins[res.tapIndex] || 0, false)
+		}
+	})
+}
+
+function pickLyricOffset() {
+	const trackId = current.value?.id
+	if (!trackId || !(lyricLines.value[0]?.time >= 0)) return
+	uni.showActionSheet({
+		itemList: ['提前 1 秒', '提前 0.5 秒', '恢复本曲原时间轴', '延后 0.5 秒', '延后 1 秒'],
+		success(res) {
+			if (current.value?.id !== trackId) return
+			const deltas = [1, 0.5, 0, -0.5, -1]
+			const d = deltas[res.tapIndex]
+			if (d === undefined) return
+			const offset = d === 0 ? 0 : lyricOffset.value + d
+			setTrackLyricOffset(trackId, offset)
+			toast('本曲歌词偏移 ' + (offset > 0 ? '+' : '') + offset + 's')
+		}
+	})
+}
+
+function close() {
+	uni.navigateBack()
+}
+
+const like = toggleLike
+const doNext = () => next(false)
+const fm = startFM
+
+function playQueueAt(i) {
+	playAt(i)
+	showQueue.value = false
+}
+
+function removeAt(i) {
+	removeFromQueue(i)
+}
+
+function previewProgress(e) {
+	if (displayDuration.value <= 0) return
+	if (!dragging.value) beginDrag()
+	dragging.value = true
+	dragSec.value = Number(e.detail.value)
+}
+
+function commitProgress(e) {
+	dragging.value = false
+	endDrag(displayDuration.value > 0 ? Math.min(displayDuration.value, Number(e.detail.value)) : undefined)
+}
+
+function cancelProgress() {
+	dragging.value = false
+	endDrag()
+}
+</script>
+
+<style scoped>
+.player-page {
+	position: fixed;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	background-color: var(--bg);
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+.bg {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	opacity: 0.55;
+	overflow: hidden;
+}
+.bg-img {
+	width: 100%;
+	height: 100%;
+	opacity: 0.35;
+}
+.bg-mask {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	background: linear-gradient(180deg, var(--bg) 0%, var(--bg) 100%);
+	opacity: 0.82;
+}
+.top {
+	position: relative;
+	z-index: 2;
+	flex-shrink: 0;
+	box-sizing: border-box;
+	height: 48px;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding-left: 4px;
+	padding-right: 4px;
+}
+.top-btn {
+	width: 44px;
+	height: 48px;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+}
+.top-title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+}
+.t1 {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text);
+	opacity: 0.88;
+}
+.t2 {
+	font-size: 10px;
+	color: var(--text);
+	opacity: 0.58;
+}
+.volume-row {
+	height: 34px;
+	flex-shrink: 0;
+	flex-direction: row;
+	align-items: center;
+	padding: 0 24px;
+}
+.volume-slider {
+	flex: 1;
+	margin-left: 8px;
+}
+.main {
+	position: relative;
+	z-index: 2;
+	flex: 1;
+	min-height: 0;
+	box-sizing: border-box;
+	padding: 12px 24px 0;
+	display: flex;
+	flex-direction: column;
+}
+.cover-area {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	margin-top: 12px;
+}
+.lyric-teaser {
+	position: relative;
+	width: 100%;
+	max-width: 360px;
+	height: 78px;
+	flex-shrink: 0;
+	margin-top: 36px;
+	overflow: hidden;
+}
+.teaser-row {
+	position: absolute;
+	top: 0;
+	left: 8px;
+	right: 8px;
+	height: 26px;
+	justify-content: center;
+	transition-property: transform, opacity;
+	transition-duration: 260ms;
+	transition-timing-function: ease-out;
+}
+.teaser-text {
+	color: var(--text);
+	font-size: 13px;
+	line-height: 22px;
+	text-align: center;
+	text-overflow: ellipsis;
+}
+.teaser-current {
+	font-size: 15px;
+}
+.art-frame {
+	position: relative;
+	flex-shrink: 0;
+}
+.art-sleeve, .record {
+	transition-property: transform;
+	transition-duration: 420ms;
+	transition-timing-function: ease-out;
+}
+.art-sleeve {
+	position: absolute;
+	top: 0;
+	height: 100%;
+	border-radius: 20px;
+	background-color: var(--secondary-bg);
+}
+.record {
+	position: absolute;
+	border-radius: 50%;
+	background-color: #192238;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #495675;
+}
+.record-face {
+	width: 100%;
+	height: 100%;
+	align-items: center;
+	justify-content: center;
+	animation: record-turn 20s linear infinite;
+	animation-play-state: paused;
+}
+.record-face.record-spinning {
+	animation-play-state: running;
+}
+@keyframes record-turn {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
+.record-mark {
+	position: absolute;
+	top: 48%;
+	width: 10%;
+	height: 2px;
+	border-radius: 1px;
+	background-color: rgba(206, 224, 255, 0.54);
+}
+.record-mark-leading {
+	right: 12%;
+}
+.record-mark-opposite {
+	left: 12%;
+	width: 7%;
+}
+.record-groove {
+	position: absolute;
+	border-radius: 50%;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #3a4762;
+}
+.groove-outer {
+	width: 83%;
+	height: 83%;
+}
+.groove-inner {
+	width: 68%;
+	height: 68%;
+}
+.record-label {
+	width: 34%;
+	height: 34%;
+	border-radius: 50%;
+	background-color: #597be0;
+	align-items: center;
+	justify-content: center;
+}
+.record-hole {
+	width: 5px;
+	height: 5px;
+	border-radius: 3px;
+	background-color: #192238;
+}
+.cover {
+	width: 100%;
+	height: 100%;
+	border-width: 1px;
+	border-style: solid;
+	border-color: var(--separator);
+	border-radius: 20px;
+	box-shadow: 0 24px 44px -14px var(--shadow);
+}
+.placeholder {
+	background-color: var(--secondary-bg);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.album-caption {
+	color: var(--text);
+	opacity: 0.56;
+	font-size: 12px;
+	margin-top: 4px;
+}
+.lyric-pane {
+	flex: 1;
+	min-height: 0;
+	margin-top: 12px;
+	position: relative;
+}
+.lyrics {
+	height: 100%;
+}
+.lyric-fade {
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 42px;
+	pointer-events: none;
+}
+.lyric-fade-top {
+	top: 0;
+	background-image: linear-gradient(180deg, var(--bg) 0%, transparent 100%);
+}
+.lyric-fade-bottom {
+	bottom: 0;
+	background-image: linear-gradient(180deg, transparent 0%, var(--bg) 100%);
+}
+.lyric-marker {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 50%;
+	border-top-width: 1px;
+	border-top-style: solid;
+	border-top-color: rgba(92, 131, 231, 0.34);
+	pointer-events: none;
+}
+.lyric-marker-time {
+	font-size: 11px;
+	color: var(--primary);
+}
+.lyric-line {
+	overflow: hidden;
+	justify-content: center;
+	font-size: 17px;
+	font-weight: 400;
+	line-height: 34px;
+	color: var(--text);
+	transition: opacity 0.25s;
+}
+.lyric-text {
+	color: var(--text);
+	text-align: center;
+}
+.lyric-trans {
+	font-size: 12px;
+	color: var(--text);
+	opacity: 0.42;
+	line-height: 18px;
+	margin-top: 2px;
+	text-align: center;
+}
+.no-lyric-center {
+	flex: 1;
+	align-items: center;
+	justify-content: center;
+}
+.no-lyric {
+	text-align: center;
+	font-size: 13px;
+	opacity: 0.45;
+}
+.track {
+	margin-top: 34px;
+}
+.name {
+	font-size: 21px;
+	font-weight: 600;
+	color: var(--text);
+	line-height: 28px;
+}
+.artist-row {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 4px;
+}
+.artist {
+	font-size: 13px;
+	color: var(--text);
+	opacity: 0.58;
+	flex: 1;
+}
+.rating-row {
+	flex-direction: row;
+	align-items: center;
+	margin-top: 8px;
+}
+.star {
+	width: 26px;
+	height: 26px;
+	align-items: center;
+	justify-content: center;
+}
+/* 歌曲信息面板 */
+.info-mask {
+	position: fixed;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.42);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 300;
+}
+.info-card {
+	width: 320px;
+	border-radius: 16px;
+	background-color: var(--bg);
+	padding: 18px 18px 10px;
+	display: flex;
+	flex-direction: column;
+}
+.info-head {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 10px;
+}
+.info-title {
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--text);
+}
+.info-body {
+	flex-direction: column;
+}
+.info-row {
+	flex-direction: row;
+	align-items: flex-start;
+	padding: 7px 0;
+}
+.info-row.col {
+	flex-direction: column;
+	align-items: flex-start;
+}
+.info-k {
+	width: 76px;
+	font-size: 13px;
+	color: var(--text);
+	opacity: 0.5;
+	flex-shrink: 0;
+}
+.info-v {
+	flex: 1;
+	font-size: 13px;
+	color: var(--text);
+	opacity: 0.9;
+	text-align: right;
+}
+.info-path {
+	font-size: 12px;
+	color: var(--text);
+	opacity: 0.6;
+	margin-top: 4px;
+	line-height: 17px;
+}
+.progress {
+	margin-top: 26px;
+	padding: 10px 0;
+}
+.seek-track {
+	height: 4px;
+	border-radius: 2px;
+	background-color: var(--border);
+}
+.seek-fill {
+	background-color: var(--primary);
+}
+.seek-thumb {
+	width: 16px;
+	height: 16px;
+	border-radius: 8px;
+	background-color: var(--primary);
+}
+.times {
+	flex-direction: row;
+	justify-content: space-between;
+	margin-top: 2px;
+}
+.time-text {
+	font-size: 11px;
+	color: var(--text);
+	opacity: 0.58;
+}
+.controls {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 24px;
+	padding: 0 6px;
+}
+.play-btn {
+	width: 58px;
+	height: 58px;
+	border-radius: 50%;
+	background-color: var(--primary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.bottom-row {
+	flex-shrink: 0;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 12px;
+	border-top-width: 1px;
+	border-top-style: solid;
+	border-top-color: var(--control-divider);
+}
+.lyrics-button {
+	width: 44px;
+	height: 36px;
+	border-radius: 10px;
+	align-items: center;
+	justify-content: center;
+}
+.lyrics-button-on {
+	background-color: var(--primary-bg);
+}
+.lyrics-button-label {
+	color: var(--text);
+	opacity: 0.42;
+	font-size: 17px;
+	font-weight: 600;
+}
+.lyrics-available {
+	color: var(--primary);
+	opacity: 1;
+}
+</style>

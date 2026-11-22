@@ -1,0 +1,62 @@
+plugins {
+    alias(libs.plugins.android.library)
+}
+
+def projectManifest = new groovy.json.JsonSlurper().parse(rootProject.file('../uniapp/manifest.json'))
+def appId = projectManifest.appid
+def exportedResources = rootProject.file("../uniapp/unpackage/resources/app-android/${appId}/www")
+def generatedAssets = layout.buildDirectory.dir('generated/freemusic-assets')
+def syncUniAppAssets = tasks.register('syncUniAppAssets', Sync) {
+    doFirst {
+        if (!new File(exportedResources, 'app-service.js').isFile()) {
+            throw new GradleException('Android resources are missing. Export Android app resources from HBuilderX first.')
+        }
+    }
+    from(exportedResources) { into "apps/${appId}/www" }
+    into generatedAssets
+}
+
+android {
+    namespace 'com.gy.freemusic.runtime'
+    compileSdk {
+        version = release(36)
+    }
+
+    defaultConfig {
+        minSdk 23
+
+    }
+    sourceSets.main.assets.setSrcDirs([generatedAssets])
+
+    buildTypes {
+        release {
+            optimization {
+                enable false
+            }
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    androidResources {
+        noCompress "uni-app-x-framework-vapor", "uni-app-x-framework-vapor-dev", "js"
+        ignoreAssetsPattern '!.svn:!.git:.*:!CVS:!thumbs.db:!picasa.ini:!*.scc:*~'
+    }
+
+    aaptOptions {
+        additionalParameters '--auto-add-overlay'
+        ignoreAssetsPattern '!.svn:!.git:.*:!CVS:!thumbs.db:!picasa.ini:!*.scc:*~'
+
+    }
+    packagingOptions {
+        pickFirst 'lib/*/libstlport_shared.so'
+        pickFirst 'lib/*/libc++_shared.so'
+
+        jniLibs {
+            useLegacyPackaging false
+        }
+    }
+}
+
+tasks.named('preBuild') { dependsOn syncUniAppAssets }

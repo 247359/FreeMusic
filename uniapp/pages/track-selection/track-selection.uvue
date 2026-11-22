@@ -1,0 +1,50 @@
+<template>
+	<view class="selection-page" :class="themeState.isDark ? 'theme-dark' : 'theme-light'">
+		<view class="selection-header" :style="{ paddingTop: statusHeight + 'px' }">
+			<view class="selection-back" @click="goBack"><AppIcon name="arrow-left" :size="22" /></view>
+			<text class="selection-title">选择歌曲</text>
+		</view>
+		<scroll-view class="selection-list" direction="vertical">
+			<TrackList :tracks="tracks" :selection-mode="true" :show-album="true" />
+		</scroll-view>
+	</view>
+</template>
+
+<script setup>
+import TrackList from '../../components/TrackList.uvue'
+import AppIcon from '../../components/AppIcon.uvue'
+import { takeTrackSelection } from '../../common/actions.js'
+import { themeState } from '../../common/store.js'
+import { statusBarHeight } from '../../common/config.js'
+
+const tracks = takeTrackSelection()
+const statusHeight = statusBarHeight()
+function goBack() {
+	uni.navigateBack()
+}
+</script>
+
+<style scoped>
+.selection-page {
+	flex: 1;
+	background-color: var(--bg);
+}
+.selection-list {
+	flex: 1;
+	padding: 8px 16px;
+}
+.selection-header {
+	flex-direction: row;
+	align-items: center;
+}
+.selection-back {
+	width: 48px;
+	height: 48px;
+	align-items: center;
+	justify-content: center;
+}
+.selection-title {
+	color: var(--text);
+	font-size: 17px;
+}
+</style>

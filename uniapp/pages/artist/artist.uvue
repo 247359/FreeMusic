@@ -1,0 +1,219 @@
+<template>
+	<view class="page" :class="themeClass">
+		<NavHeader :title="artist.name || '歌手'">
+			<template #right>
+				<AppIcon
+					:name="liked ? 'heart-solid' : 'heart'"
+					:color="liked ? 'primary' : 'text'"
+					:size="20"
+					@click="like"
+				/>
+				<TrackSelectionButton :tracks="tracks" />
+			</template>
+		</NavHeader>
+		<view :style="{ height: headerH + 'px' }"></view>
+		<scroll-view class="scroll" @touchstart="tabSwipe.start" @touchmove="tabSwipe.move" @touchend="tabSwipe.end" @touchcancel="tabSwipe.cancel" :show-scrollbar="false" scroll-y :style="{ top: headerH + 'px', bottom: bottomH + 'px' }">
+			<PageState :loading="loading" :error="error" @retry="load">
+				<view class="info">
+					<image v-if="artist.picUrl" class="avatar artist-img" :src="artist.picUrl" mode="aspectFill"></image>
+					<view v-else class="avatar artist-img placeholder">
+						<text class="initial">{{ (artist.name || '?').slice(0, 1) }}</text>
+					</view>
+					<text class="name">{{ artist.name }}</text>
+					<text class="meta">{{ artist.albumCount || albums.length }} 张专辑 · Navidrome</text>
+					<view class="play-all press" @click="playAll">
+						<AppIcon name="play" color="light" :size="16" />
+						<text class="btn-text">播放热门歌曲</text>
+					</view>
+				</view>
+
+				<view class="tabs">
+					<SectionTabs :items="tabs" :selected="tab" @change="setTab" />
+				</view>
+
+				<view v-if="tab === 'songs'" class="list">
+					<TrackList :tracks="tracks" :show-album="true" @play="playAt" @more="onTrackMore" />
+				</view>
+				<view v-else class="list grid">
+					<CoverCard
+						v-for="a in albums"
+						:key="a.id"
+						:item="a"
+						type="album"
+						:width="cardWidth"
+						:gap="10"
+						sub="artist"
+						@click="goAlbum(a)"
+						@play="playAlbum(a)"
+					/>
+				</view>
+			</PageState>
+		</scroll-view>
+		<MiniPlayer :with-nav="false" />
+	</view>
+</template>
+
+<script setup>
+import SectionTabs from '../../components/SectionTabs.uvue'
+import { createTabSwipe } from '../../common/swipe.js'
+import TrackSelectionButton from '../../components/TrackSelectionButton.uvue'
+import NavHeader from '../../components/NavHeader.uvue'
+import PageState from '../../components/PageState.uvue'
+import TrackList from '../../components/TrackList.uvue'
+import CoverCard from '../../components/CoverCard.uvue'
+import MiniPlayer from '../../components/MiniPlayer.uvue'
+import AppIcon from '../../components/AppIcon.uvue'
+import { headerHeight, miniPlayerClearance, windowWidth } from '../../common/config.js'
+import { player, themeState } from '../../common/store.js'
+import * as api from '../../common/api.js'
+import { setQueue } from '../../common/player.js'
+import { goDetail, playCollection, showTrackMenu } from '../../common/actions.js'
+import { toast } from '../../common/format.js'
+
+const id = ref('')
+const artist = ref({})
+const albums = ref([])
+const tracks = ref([])
+const liked = ref(false)
+const tabs = [{ key: 'songs', label: '热门歌曲' }, { key: 'albums', label: '专辑' }]
+const tab = ref('songs')
+const tabSwipe = createTabSwipe(tabs.map((item) => item.key), () => tab.value, setTab)
+const loading = ref(true)
+const error = ref('')
+
+const themeClass = computed(() => (themeState.isDark ? 'theme-dark' : 'theme-light'))
+const headerH = computed(() => headerHeight())
+const bottomH = computed(() => miniPlayerClearance(player.visible) + 8)
+const cardWidth = computed(() => Math.floor((windowWidth - 32 - 20) / 3))
+
+onLoad((options) => {
+	id.value = decodeURIComponent(options.id || '')
+	load()
+})
+
+function setTab(t) {
+	tab.value = t
+}
+
+function onTrackMore(e) {
+	showTrackMenu(e && e.track)
+}
+
+function load() {
+	loading.value = true
+	error.value = ''
+	api
+		.getArtistDetail(id.value)
+		.then((data) => {
+			artist.value = data.artist || {}
+			albums.value = data.albums || []
+			tracks.value = data.tracks || []
+			liked.value = !!artist.value.liked
+			loading.value = false
+		})
+		.catch((e) => {
+			error.value = e.message || '加载失败'
+			loading.value = false
+		})
+}
+
+function playAll() {
+	setQueue(tracks.value, 0, { name: artist.value.name, id: id.value, type: 'artist' })
+}
+
+function playAt(i) {
+	setQueue(tracks.value, i, { name: artist.value.name, id: id.value, type: 'artist' })
+}
+
+function goAlbum(a) {
+	goDetail('album', a)
+}
+
+function playAlbum(a) {
+	playCollection('album', a.id, { name: a.name })
+}
+
+function like() {
+	const next = !liked.value
+	api
+		.likeArtist(id.value, next)
+		.then(() => {
+			liked.value = next
+			toast(next ? '已收藏歌手' : '已取消收藏')
+		})
+		.catch((e) => toast(e.message || '操作失败'))
+}
+</script>
+
+<style scoped>
+.page {
+	height:  100%;
+	background-color: var(--bg);
+}
+.scroll {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+}
+.info {
+	padding: 24px 20px 22px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	background: linear-gradient(180deg, var(--secondary-bg) 0%, var(--bg) 100%);
+}
+.avatar {
+	width: 90px;
+	height: 90px;
+}
+.placeholder {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.initial {
+	font-size: 36px;
+	font-weight: 600;
+	color: var(--primary);
+}
+.name {
+	font-size: 23px;
+	font-weight: 600;
+	color: var(--text);
+	margin-top: 16px;
+}
+.meta {
+	font-size: 12px;
+	color: var(--text);
+	opacity: 0.58;
+	margin-top: 5px;
+}
+.play-all {
+	margin-top: 20px;
+	height: 40px;
+	padding: 0 20px;
+	border-radius: 8px;
+	background-color: var(--primary);
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+}
+.btn-text {
+	color: #ffffff;
+	font-size: 14px;
+	font-weight: 400;
+	margin-left: 8px;
+}
+.tabs {
+	flex-direction: row;
+	padding: 8px 16px 4px;
+}
+.list {
+	padding: 10px 16px 20px;
+}
+.grid {
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+</style>

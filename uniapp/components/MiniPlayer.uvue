@@ -1,0 +1,146 @@
+<template>
+	<view
+		v-if="player.visible && !!current"
+		class="mini"
+		:class="themeClass"
+		:style="{ bottom: bottomOffset + 'px' }"
+	>
+		<view v-if="percent > 0" class="progress">
+			<view class="progress-fill" :style="{ width: percent + '%' }"></view>
+		</view>
+		<view class="body">
+			<CoverImage v-if="current.thumbUrl || current.picUrl" class="cover cover-img" :src="current.thumbUrl || current.picUrl" @click="open" />
+			<view v-else class="cover empty-cover" @click="open"><AppIcon name="music-note" color="primary" :size="18" /></view>
+			<view class="info" @click="open">
+				<text class="name ellipsis">{{ current.name }}</text>
+				<text class="artist ellipsis">{{ current.artistName }}</text>
+			</view>
+			<view class="act" @click="toggleLike">
+				<AppIcon
+					:name="liked ? 'heart-solid' : 'heart'"
+					:color="liked ? 'primary' : 'text'"
+					:opacity="liked ? 1 : 0.62"
+					:size="20"
+				/>
+			</view>
+			<view class="act" @click="toggle">
+				<AppIcon :name="player.playing ? 'pause' : 'play'" color="primary" :size="24" />
+			</view>
+			<view class="act" @click="showQueue = true">
+				<AppIcon name="list" :opacity="0.62" :size="21" />
+			</view>
+		</view>
+	</view>
+	<QueueSheet :show="showQueue && !!current" @close="showQueue = false" @play="playQueued" @remove="removeFromQueue" />
+</template>
+
+<script setup>
+import AppIcon from './AppIcon.uvue'
+import CoverImage from './CoverImage.uvue'
+import QueueSheet from './QueueSheet.uvue'
+import { navBarHeight, safeBottom } from '../common/config.js'
+import { player, isLiked, themeState } from '../common/store.js'
+import { playAt, removeFromQueue, toggle, toggleLike } from '../common/player.js'
+
+const props = defineProps({
+	/** 页面底部是否有 BottomNav */
+	withNav: { type: Boolean, default: true }
+})
+
+const themeClass = computed(() => (themeState.isDark ? 'theme-dark' : 'theme-light'))
+const current = computed(() => player.queue[player.index] || null)
+const showQueue = ref(false)
+const liked = computed(() => (current.value ? isLiked(current.value.id) : false))
+const percent = computed(() => {
+	const d = player.duration || (current.value && current.value.duration) || 0
+	return d > 0 ? Math.min(100, (player.currentTime / d) * 100) : 0
+})
+const bottomOffset = computed(() => (props.withNav ? navBarHeight() : safeBottom()))
+
+function open() {
+	uni.navigateTo({ url: '/pages/player/player', animationType: 'slide-in-bottom', animationDuration: 260 })
+}
+
+function playQueued(index) {
+	playAt(index)
+	showQueue.value = false
+}
+</script>
+
+<style scoped>
+.mini {
+	position: fixed;
+	left: 0;
+	right: 0;
+	height: 64px;
+	background-color: var(--bg);
+	border-top-width: 1px;
+	border-top-style: solid;
+	border-top-color: var(--border);
+	z-index: 94;
+}
+.progress {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: -1px;
+	height: 2px;
+	background-color: var(--secondary-bg-t);
+}
+.progress-fill {
+	height: 2px;
+	background-color: var(--primary);
+}
+.body {
+	height: 100%;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding-left: 14px;
+	padding-right: 6px;
+}
+.cover {
+	width: 44px;
+	height: 44px;
+	flex-shrink: 0;
+	border-radius: 5px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: var(--separator);
+	box-shadow: 0 6px 8px -2px var(--shadow);
+}
+.empty-cover {
+	background-color: var(--secondary-bg);
+	align-items: center;
+	justify-content: center;
+}
+.info {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	margin-left: 12px;
+}
+.name {
+	font-size: 15px;
+	font-weight: 400;
+	opacity: 0.88;
+	color: var(--text);
+	line-height: 20px;
+}
+.artist {
+	font-size: 11px;
+	opacity: 0.58;
+	color: var(--text);
+	line-height: 16px;
+}
+.act {
+	width: 40px;
+	height: 44px;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+}
+</style>

@@ -1,0 +1,49 @@
+<template>
+	<image
+		class="app-icon press"
+		:src="src"
+		:style="{
+			width: size + 'px',
+			height: size + 'px',
+			opacity: finalOpacity
+		}"
+		mode="aspectFit"
+		@click="onClick"
+	></image>
+</template>
+
+<script setup>
+import { themeState } from '../common/store.js'
+
+/**
+ * 应用图标提供三种颜色。
+ * color: text（跟随主题） | light（固定白） | primary（主色蓝）
+ */
+const props = defineProps({
+	name: { type: String, required: true },
+	color: { type: String, default: 'text' },
+	size: { type: Number, default: 20 },
+	opacity: { type: Number, default: 1 }
+})
+const emit = defineEmits(['click'])
+
+const src = computed(() => {
+	let suffix = 'blk'
+	if (props.color === 'primary') suffix = 'pri'
+	else if (props.color === 'light') suffix = 'wht'
+	else if (themeState.isDark) suffix = 'wht'
+	return '/static/icons/' + props.name + '-' + suffix + '.png'
+})
+
+const finalOpacity = computed(() => props.opacity)
+
+function onClick(e) {
+	emit('click', e)
+}
+</script>
+
+<style scoped>
+.app-icon {
+	flex-shrink: 0;
+}
+</style>

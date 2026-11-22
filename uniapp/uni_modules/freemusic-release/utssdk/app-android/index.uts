@@ -1,0 +1,12 @@
+import ReleaseInfo from 'uts.sdk.modules.freemusicRelease.ReleaseInfo'
+import { UTSAndroid } from 'io.dcloud.uts'
+
+export function readReleaseInfo(): string {
+	const context = UTSAndroid.getAppContext()
+	return context == null ? '{}' : ReleaseInfo.read(context)
+}
+
+export function openReleaseDownload(url: string): boolean {
+	const activity = UTSAndroid.getUniActivity()
+	return activity != null && ReleaseInfo.open(activity, url)
+}

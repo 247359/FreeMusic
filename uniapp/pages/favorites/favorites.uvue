@@ -1,0 +1,190 @@
+<template>
+	<view class="page" :class="themeClass">
+		<NavHeader title="我的收藏">
+			<template #right>
+				<TrackSelectionButton :tracks="tracks" />
+			</template>
+		</NavHeader>
+		<view :style="{ height: headerH + 'px' }"></view>
+		<view class="tabs" :style="{ top: headerH + 'px' }">
+			<SectionTabs :items="tabItems" :selected="tab" @change="switchTab" />
+		</view>
+		<scroll-view class="scroll" @touchstart="tabSwipe.start" @touchmove="tabSwipe.move" @touchend="tabSwipe.end" @touchcancel="tabSwipe.cancel" :show-scrollbar="false" scroll-y :style="{ top: scrollTop + 'px', bottom: bottomH + 'px' }">
+			<PageState :loading="loading" :error="error" @retry="load">
+				<view v-if="tab === 0" class="list">
+					<view v-if="tracks.length" class="play-bar press" @click="playAll">
+						<AppIcon name="play" color="light" :size="15" />
+						<text class="play-bar-text">播放全部 ({{ tracks.length }})</text>
+					</view>
+					<TrackList v-if="tracks.length" :tracks="tracks" :show-album="true" @play="playAt" @more="onTrackMore" />
+					<view v-else class="empty"><text class="empty-text">还没有收藏的歌曲</text></view>
+				</view>
+				<view v-else-if="tab === 1" class="grid-wrap">
+					<view v-if="albums.length" class="grid">
+						<CoverCard
+							v-for="a in albums"
+							:key="a.id"
+							:item="a"
+							type="album"
+							sub="artist"
+							:width="cardWidth"
+						:gap="10"
+							@click="goDetail('album', a)"
+							@play="playCollection('album', a)"
+						/>
+					</view>
+					<view v-else class="empty"><text class="empty-text">还没有收藏的专辑</text></view>
+				</view>
+				<view v-else class="grid-wrap">
+					<view v-if="artists.length" class="grid">
+						<CoverCard
+							v-for="a in artists"
+							:key="a.id"
+							:item="a"
+							type="artist"
+							sub="count"
+							:width="cardWidth"
+						:gap="10"
+							@click="goDetail('artist', a)"
+							@play="playCollection('artist', a)"
+						/>
+					</view>
+					<view v-else class="empty"><text class="empty-text">还没有收藏的歌手</text></view>
+				</view>
+			</PageState>
+		</scroll-view>
+		<MiniPlayer :with-nav="false" />
+	</view>
+</template>
+
+<script setup>
+import SectionTabs from '../../components/SectionTabs.uvue'
+import { createTabSwipe } from '../../common/swipe.js'
+import TrackSelectionButton from '../../components/TrackSelectionButton.uvue'
+import NavHeader from '../../components/NavHeader.uvue'
+import PageState from '../../components/PageState.uvue'
+import TrackList from '../../components/TrackList.uvue'
+import CoverCard from '../../components/CoverCard.uvue'
+import MiniPlayer from '../../components/MiniPlayer.uvue'
+import AppIcon from '../../components/AppIcon.uvue'
+import { headerHeight, miniPlayerClearance, windowWidth } from '../../common/config.js'
+import { player, themeState } from '../../common/store.js'
+import * as api from '../../common/api.js'
+import { setQueue } from '../../common/player.js'
+import { goDetail, showTrackMenu, playCollection } from '../../common/actions.js'
+
+const tabs = ['歌曲', '专辑', '歌手']
+const tab = ref(0)
+const tabSwipe = createTabSwipe(tabs.map((tab, index) => index), () => tab.value, switchTab)
+const tracks = ref([])
+const albums = ref([])
+const artists = ref([])
+const loading = ref(true)
+const error = ref('')
+
+const themeClass = computed(() => (themeState.isDark ? 'theme-dark' : 'theme-light'))
+const headerH = computed(() => headerHeight())
+const scrollTop = computed(() => headerHeight() + 44)
+const bottomH = computed(() => miniPlayerClearance(player.visible) + 8)
+const tabItems = computed(() => {
+	const counts = [tracks.value.length, albums.value.length, artists.value.length]
+	return tabs.map((label, key) => ({ key, label, count: counts[key] }))
+})
+const cardWidth = computed(() => Math.floor((Math.min(windowWidth, 600) - 32 - 24) / 3))
+
+onLoad(() => load())
+
+function switchTab(i) {
+	tab.value = i
+}
+
+function onTrackMore(e) {
+	showTrackMenu(e && e.track)
+}
+
+function load() {
+	loading.value = true
+	error.value = ''
+	api
+		.getStarred()
+		.then((r) => {
+			tracks.value = r.songs || []
+			albums.value = r.albums || []
+			artists.value = r.artists || []
+			loading.value = false
+		})
+		.catch((e) => {
+			error.value = e.message || '加载失败'
+			loading.value = false
+		})
+}
+
+function playAll() {
+	setQueue(tracks.value, 0, { name: '我喜欢的音乐' })
+}
+
+function playAt(i) {
+	setQueue(tracks.value, i, { name: '我喜欢的音乐' })
+}
+</script>
+
+<style scoped>
+.page {
+	height: 100%;
+	background-color: var(--bg);
+}
+.scroll {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+}
+.tabs {
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 44px;
+	padding: 0 20px;
+	background-color: var(--bg);
+}
+.list {
+	padding: 8px 16px 20px;
+}
+.play-bar {
+	height: 40px;
+	border-radius: 8px;
+	background-color: var(--primary);
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: 8px;
+}
+.play-bar-text {
+	color: #ffffff;
+	font-size: 14px;
+	font-weight: 400;
+	margin-left: 8px;
+}
+.grid-wrap {
+	padding: 12px 16px 20px;
+}
+.grid {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+.empty {
+	display: flex;
+	flex-direction: row;
+	justify-content: center;
+	align-items: center;
+	width: 100%;
+	padding: 60px 0;
+}
+.empty-text {
+	font-size: 13px;
+	color: var(--text);
+	opacity: 0.58;
+	text-align: center;
+}
+</style>

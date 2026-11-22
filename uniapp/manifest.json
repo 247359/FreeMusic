@@ -1,0 +1,60 @@
+{
+    "name" : "FreeMusic",
+    "appid" : "__UNI__EB04E2D",
+    "description" : "连接自建 Navidrome 音乐库的音乐播放器",
+    "versionName" : "1.0.0",
+    "versionCode" : "100",
+    "uni-app-x" : {
+        "vapor" : true,
+        "styleIsolationVersion" : "2",
+        "vapor-render-target" : "bytecode",
+        "vapor-default-script-lang" : "js"
+    },
+    "vueVersion" : "3",
+    "quickapp" : {},
+    "mp-weixin" : {
+        "appid" : "",
+        "setting" : {
+            "urlCheck" : false
+        },
+        "usingComponents" : true
+    },
+    "uniStatistics" : {
+        "enable" : false
+    },
+    "app" : {
+        "distribute" : {
+            "icons" : {
+                "android" : {
+                    "hdpi" : "static/app-icons/icon-72.png",
+                    "xhdpi" : "static/app-icons/icon-96.png",
+                    "xxhdpi" : "static/app-icons/icon-144.png",
+                    "xxxhdpi" : "static/app-icons/icon-192.png"
+                }
+            }
+        }
+    },
+    "app-android" : {
+        "distribute" : {
+            "packageName" : "com.gy.freemusic",
+            "abiFilters" : ["arm64-v8a", "armeabi-v7a", "x86_64"],
+            "modules" : {},
+            "icons" : {
+                "hdpi" : "static/app-icons/icon-72.png",
+                "xhdpi" : "static/app-icons/icon-96.png",
+                "xxhdpi" : "static/app-icons/icon-144.png",
+                "xxxhdpi" : "static/app-icons/icon-192.png"
+            },
+            "splashScreens" : {
+                "default" : {}
+            }
+        }
+    },
+    "app-ios" : {
+        "distribute" : {
+            "modules" : {},
+            "icons" : {},
+            "splashScreens" : {}
+        }
+    }
+}

@@ -1,0 +1,219 @@
+<template>
+	<view class="home">
+		<view class="listen-card press" @click="listen">
+			<view class="listen-text">
+				<text class="listen-label">{{ current ? (player.playing ? '正在播放' : '继续播放') : '随机漫游' }}</text>
+				<text class="listen-title ellipsis">{{ current ? current.name : '从曲库随机开播' }}</text>
+				<text class="listen-sub ellipsis">{{ listenSubtitle }}</text>
+			</view>
+			<view class="listen-art">
+				<CoverImage v-if="art" class="listen-cover" :src="art" />
+				<view class="listen-button"><AppIcon :name="player.playing ? 'arrow-right' : 'play'" color="light" :size="20" /></view>
+			</view>
+		</view>
+
+		<view v-if="recent.length" class="block">
+			<SectionTitle title="最近播放" :more="true" @more="goList('recent', '', '最近播放')" />
+			<scroll-view class="history-strip" direction="horizontal" :show-scrollbar="false">
+				<view class="history-row" :style="{ width: recent.length * 88 + 'px' }">
+				<view v-for="(track, index) in recent" :key="track.id" class="history-item press" @click="playRecent(index)">
+					<CoverImage v-if="track.thumbUrl || track.picUrl" class="history-cover cover-img" :src="track.thumbUrl || track.picUrl" />
+					<view v-else class="history-cover history-placeholder"><AppIcon name="music-note" color="primary" :size="24" /></view>
+					<text class="history-name" :max-lines="2">{{ track.name }}</text>
+				</view>
+				</view>
+			</scroll-view>
+		</view>
+
+		<view class="block">
+			<SectionTitle title="每日推荐" :tracks="preview" :more="daily.length > 6" @more="goList('album', 'daily', '每日推荐')" />
+			<PageState :loading="loading" :error="error" @retry="load">
+				<TrackList v-if="daily.length" :tracks="preview" @play="playDaily" @more="showTrackMenu($event.track)" />
+				<text v-else class="empty-text">添加歌曲后，这里会显示当天的推荐。</text>
+			</PageState>
+		</view>
+	</view>
+</template>
+
+<script setup>
+import AppIcon from '../AppIcon.uvue'
+import PageState from '../PageState.uvue'
+import SectionTitle from '../SectionTitle.uvue'
+import CoverImage from '../CoverImage.uvue'
+import TrackList from '../TrackList.uvue'
+import { fmtTime, toast } from '../../common/format.js'
+import { history, player } from '../../common/store.js'
+import { getDailySongs } from '../../common/api.js'
+import { goList, showTrackMenu } from '../../common/actions.js'
+import { currentTrack, setQueue, startFM, toggle } from '../../common/player.js'
+
+const props = defineProps({
+	active: { type: Boolean, default: false }
+})
+
+const loading = ref(true)
+const error = ref('')
+const daily = ref([])
+const current = computed(() => currentTrack())
+const art = computed(() => current.value ? current.value.thumbUrl || current.value.picUrl : '')
+const recent = computed(() => history.list.slice(0, 8))
+const preview = computed(() => daily.value.slice(0, 6))
+const listenSubtitle = computed(() => {
+	const track = current.value
+	if (!track) return '边听边发现'
+	const artist = track.artistName || '未知歌手'
+	return player.currentTime > 0 && !player.playing ? artist + ' · ' + fmtTime(player.currentTime) : artist
+})
+let requestedDay = ''
+let requestId = 0
+
+function refreshIfNeeded() {
+	if (props.active && requestedDay !== new Date().toDateString()) load()
+}
+
+watch(() => props.active, refreshIfNeeded, { immediate: true })
+
+function reload() {
+	requestedDay = ''
+	daily.value = []
+	requestId++
+	refreshIfNeeded()
+}
+defineExpose({ reload, refreshIfNeeded })
+
+function load() {
+	const id = ++requestId
+	requestedDay = new Date().toDateString()
+	loading.value = true
+	error.value = ''
+	getDailySongs(40).then((tracks) => {
+		if (id !== requestId) return
+		daily.value = tracks
+		loading.value = false
+	}).catch((e) => {
+		if (id !== requestId) return
+		error.value = e.message || '加载失败'
+		loading.value = false
+	})
+}
+
+function openPlayer() {
+	uni.navigateTo({ url: '/pages/player/player', animationType: 'slide-in-bottom', animationDuration: 260 })
+}
+
+function listen() {
+	if (current.value) {
+		if (!player.playing) toggle()
+		openPlayer()
+		return
+	}
+	startFM().then(() => {
+		if (current.value) openPlayer()
+	}).catch((e) => toast(e.message || '播放失败'))
+}
+
+function playRecent(index) {
+	setQueue(history.list, index, { name: '最近播放' })
+	openPlayer()
+}
+
+function playDaily(index) {
+	setQueue(daily.value, index, { name: '每日推荐' })
+	openPlayer()
+}
+</script>
+
+<style scoped>
+.home {
+	padding: 12px 16px 24px;
+}
+.listen-card {
+	min-height: 116px;
+	padding: 16px;
+	border-radius: 16px;
+	background: linear-gradient(to right, #263f9e 0%, #456fed 100%);
+	flex-direction: row;
+	align-items: center;
+}
+.listen-text {
+	flex: 1;
+	min-width: 0;
+	margin-right: 12px;
+}
+.listen-label {
+	font-size: 12px;
+	font-weight: 400;
+	color: #e0e8ff;
+}
+.listen-title {
+	font-size: 22px;
+	font-weight: 600;
+	color: #ffffff;
+	margin-top: 6px;
+}
+.listen-sub {
+	font-size: 12px;
+	color: #e0e8ff;
+	margin-top: 5px;
+}
+.listen-art {
+	width: 64px;
+	height: 64px;
+	border-radius: 12px;
+	background-color: rgba(255, 255, 255, 0.17);
+	overflow: hidden;
+	align-items: center;
+	justify-content: center;
+}
+.listen-cover {
+	position: absolute;
+	width: 64px;
+	height: 64px;
+}
+.listen-button {
+	width: 34px;
+	height: 34px;
+	border-radius: 17px;
+	background-color: rgba(22, 34, 77, 0.78);
+	align-items: center;
+	justify-content: center;
+}
+.block {
+	margin-top: 26px;
+}
+.history-strip {
+	width: 100%;
+	height: 115px;
+}
+.history-row {
+	flex-direction: row;
+}
+.history-item {
+	width: 76px;
+	flex-shrink: 0;
+	margin-right: 12px;
+}
+.history-cover {
+	width: 76px;
+	height: 76px;
+	border-radius: 10px;
+}
+.history-placeholder {
+	background-color: var(--secondary-bg);
+	align-items: center;
+	justify-content: center;
+}
+.history-name {
+	margin-top: 5px;
+	font-size: 11px;
+	line-height: 15px;
+	text-overflow: ellipsis;
+	font-weight: 400;
+	color: var(--text);
+}
+.empty-text {
+	font-size: 13px;
+	color: var(--text);
+	opacity: 0.62;
+}
+</style>

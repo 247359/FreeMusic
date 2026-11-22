@@ -1,0 +1,375 @@
+<template>
+	<view class="library">
+		<view class="user" :class="themeClass">
+			<view class="avatar">
+				<text class="avatar-text">{{ initial }}</text>
+			</view>
+			<view class="user-info">
+				<text class="nickname">{{ user.username || '未连接' }}</text>
+				<text class="server ellipsis">{{ user.server || '请在设置中连接 Navidrome 服务' }}</text>
+			</view>
+			<view class="user-btn press" @click="goSettings">
+				<AppIcon name="settings" :size="21" :opacity="0.62" />
+			</view>
+		</view>
+
+		<view class="content">
+			<view class="quick">
+				<view class="like-card press" @click="goAllSongs">
+					<AppIcon name="list" color="light" :size="30" />
+					<view class="f-1">
+						<text class="qc-title">全部歌曲</text>
+						<text class="qc-sub">浏览服务器曲库</text>
+					</view>
+					<AppIcon name="arrow-right" color="light" :size="18" :opacity="0.7" />
+				</view>
+				<view class="mini-quick">
+					<view class="mq press" @click="goFavorites">
+						<AppIcon name="heart-solid" color="primary" :size="19" />
+						<text class="mq-label">我的收藏</text>
+					</view>
+					<view class="mq press" @click="goMostPlayed">
+						<AppIcon name="sort-up" color="primary" :size="19" />
+						<text class="mq-label">最常播放</text>
+					</view>
+				</view>
+			</view>
+
+			<view class="block">
+				<view class="section-head">
+					<SectionTitle title="我的歌单" :tight="true" />
+					<view class="sec-btn press" @click="createPlaylist">
+						<AppIcon name="plus" :size="18" :opacity="0.72" />
+					</view>
+				</view>
+				<PageState :loading="loading" :error="error" @retry="load">
+					<view v-if="playlists.length" class="playlist-rows">
+						<view
+							v-for="p in playlists"
+							:key="p.id"
+							class="pl-row press"
+							@click="detail(p)"
+						>
+							<image v-if="p.picUrl" class="pl-cover cover-img" :src="p.picUrl" mode="aspectFill"></image>
+							<view v-else class="pl-cover pl-placeholder"><AppIcon name="list" color="primary" :size="20" :opacity="0.6" /></view>
+							<view class="pl-info">
+								<text class="pl-name ellipsis">{{ p.name }}</text>
+								<text class="pl-sub">{{ p.trackCount }} 首 · {{ p.creator || 'Navidrome' }}</text>
+							</view>
+							<AppIcon name="arrow-right" :size="17" :opacity="0.4" />
+						</view>
+						<view class="playlist-end">
+							<text class="playlist-end-label">没有更多了</text>
+						</view>
+					</view>
+					<view v-else class="empty">
+						<text class="empty-text">把想一起听的歌曲放进同一张歌单</text>
+						<view class="create-empty press" @click="createPlaylist">
+							<AppIcon name="plus" color="primary" :size="16" />
+							<text class="create-empty-label">新建歌单</text>
+						</view>
+					</view>
+				</PageState>
+			</view>
+
+		</view>
+	</view>
+</template>
+
+<script setup>
+import AppIcon from '../AppIcon.uvue'
+import PageState from '../PageState.uvue'
+import SectionTitle from '../SectionTitle.uvue'
+import { user, useTheme } from '../../common/store.js'
+import * as api from '../../common/api.js'
+import { goDetail, goFavorites, goList, goSettings } from '../../common/actions.js'
+import { toast } from '../../common/format.js'
+
+const props = defineProps({
+	active: { type: Boolean, default: false }
+})
+
+const theme = useTheme()
+const themeClass = computed(() => theme.themeClass())
+const initial = computed(() => (user.username || 'N').slice(0, 1).toUpperCase())
+
+const loading = ref(true)
+const error = ref('')
+const loaded = ref(false)
+const playlists = ref([])
+
+watch(
+	() => props.active,
+	(v) => {
+		if (v && !loaded.value) load()
+	},
+	{ immediate: true }
+)
+
+/** 供父级在账户切换后强制刷新 */
+function reload() {
+	loaded.value = false
+	load()
+}
+defineExpose({ reload })
+
+function createPlaylist() {
+	uni.showModal({
+		title: '新建歌单',
+		editable: true,
+		placeholderText: '输入歌单名称',
+		success: (res) => {
+			const name = (res.content || '').trim()
+			if (!res.confirm || !name) return
+			api
+				.createPlaylist(name)
+				.then(() => {
+					toast('已创建歌单')
+					load()
+				})
+				.catch((e) => toast(e.message || '创建失败'))
+		}
+	})
+}
+
+function load() {
+	loaded.value = true
+	loading.value = true
+	error.value = ''
+	Promise.all([
+		api.getPlaylists(),
+		api.fetchLikedIds().catch(() => [])
+	])
+		.then(([list]) => {
+			playlists.value = list || []
+			loading.value = false
+		})
+		.catch((e) => {
+			error.value = e.message || '加载失败'
+			loading.value = false
+		})
+}
+
+function goAllSongs() {
+	goList('library', '', '全部歌曲')
+}
+
+function goMostPlayed() {
+	goList('mostPlayed', '', '最常播放')
+}
+
+function detail(item) {
+	goDetail('playlist', item)
+}
+
+</script>
+
+<style scoped>
+.user {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding-top: 14px;
+	padding-bottom: 18px;
+	padding-left: 16px;
+	padding-right: 8px;
+}
+.avatar {
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+	background-color: var(--primary-bg);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-right: 12px;
+}
+.avatar-text {
+	font-size: 20px;
+	font-weight: 600;
+	color: var(--primary);
+}
+.user-info {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+.user-btn {
+	width: 36px;
+	height: 36px;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	border-radius: 18px;
+}
+.nickname {
+	font-size: 17px;
+	font-weight: 600;
+	color: var(--text);
+}
+.server {
+	font-size: 11px;
+	color: var(--text);
+	opacity: 0.58;
+	margin-top: 3px;
+}
+.content {
+	padding: 0 16px 20px;
+}
+.quick {
+	flex-direction: column;
+}
+.like-card {
+	width: 100%;
+	height: 96px;
+	border-radius: 12px;
+	background: linear-gradient(to right, #335eea 0%, #6b8cf3 100%);
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding: 0 14px;
+	margin-bottom: 12px;
+}
+.qc-title {
+	font-size: 15px;
+	font-weight: 600;
+	color: #ffffff;
+	margin-left: 12px;
+}
+.qc-sub {
+	font-size: 11px;
+	color: #ffffff;
+	opacity: 0.72;
+	margin-left: 12px;
+	margin-top: 4px;
+}
+.mini-quick {
+	flex: 1;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-content: space-between;
+	justify-content: space-between;
+}
+.mq {
+	width: calc(50% - 5px);
+	height: 48px;
+	margin-bottom: 10px;
+	border-radius: 10px;
+	background-color: var(--secondary-bg);
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+}
+.mq-label {
+	font-size: 12px;
+	font-weight: 400;
+	color: var(--text);
+	opacity: 0.88;
+	margin-left: 8px;
+}
+.block {
+	margin-top: 30px;
+}
+.section-head {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-bottom: 14px;
+}
+.sec-btn {
+	width: 34px;
+	height: 34px;
+	flex-shrink: 0;
+	margin-right: -6px;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	border-radius: 17px;
+}
+.section {
+	flex: 1;
+}
+.playlist-rows {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+}
+.playlist-end {
+	align-items: center;
+	padding: 18px 0;
+}
+.playlist-end-label {
+	font-size: 12px;
+	color: var(--text);
+	opacity: 0.5;
+}
+.pl-row {
+	width: 100%;
+	height: 62px;
+	flex-direction: row;
+	align-items: center;
+}
+.pl-info {
+	flex: 1;
+	min-width: 0;
+}
+.pl-cover {
+	flex-shrink: 0;
+	width: 46px;
+	height: 46px;
+	border-radius: 8px;
+	margin-right: 12px;
+}
+.pl-placeholder {
+	background-color: var(--secondary-bg);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.pl-name {
+	font-size: 14px;
+	font-weight: 400;
+	opacity: 0.88;
+	color: var(--text);
+}
+.pl-sub {
+	font-size: 11px;
+	opacity: 0.58;
+	color: var(--text);
+	margin-top: 3px;
+}
+.empty {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	width: 100%;
+	padding: 28px 0;
+}
+.empty-text {
+	font-size: 13px;
+	color: var(--text);
+	opacity: 0.58;
+	text-align: center;
+}
+.create-empty {
+	flex-direction: row;
+	align-items: center;
+	align-self: center;
+	margin-top: 12px;
+	padding: 8px 12px;
+	border-radius: 8px;
+	background-color: var(--primary-bg);
+}
+.create-empty-label {
+	margin-left: 4px;
+	font-size: 13px;
+	font-weight: 400;
+	color: var(--primary);
+}
+</style>

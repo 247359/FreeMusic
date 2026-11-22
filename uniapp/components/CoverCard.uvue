@@ -1,0 +1,113 @@
+<template>
+	<view
+		class="cover-card"
+		:style="{ width: props.width + 'px', marginRight: props.gap + 'px', marginBottom: props.gap + 'px' }"
+		@click="emit('click', props.item)"
+	>
+		<view class="cover-wrap" :style="{ width: props.width + 'px', height: props.width + 'px' }">
+			<CoverImage
+				v-if="props.item.picUrl && !missingArt"
+				:class="props.type === 'artist' ? 'artist-img' : 'cover-img'"
+				:src="props.item.picUrl"
+				mode="aspectFill"
+				style="width: 100%; height: 100%"
+				@unavailable="missingArt = true"
+			/>
+			<view v-else class="placeholder" :class="{ round: props.type === 'artist' }">
+				<text v-if="props.type === 'artist'" class="placeholder-glyph">{{ initial }}</text>
+				<text v-else class="placeholder-glyph">♪</text>
+			</view>
+			<view v-if="props.showPlay" class="play-badge" @click.stop="emit('play', props.item)">
+				<AppIcon name="play" color="light" :size="12" />
+			</view>
+		</view>
+		<text class="title ellipsis">{{ props.item.name }}</text>
+		<text v-if="props.sub" class="sub ellipsis">{{ subValue }}</text>
+	</view>
+</template>
+
+<script setup>
+import AppIcon from './AppIcon.uvue'
+import CoverImage from './CoverImage.uvue'
+import { fmtCount } from '../common/format.js'
+
+const props = defineProps({
+	item: { type: Object, required: true },
+	type: { type: String, default: 'album' }, // album | playlist | artist
+	width: { type: Number, default: 110 },
+	sub: { type: String, default: '' }, // artist | count | description
+	showPlay: { type: Boolean, default: true },
+	gap: { type: Number, default: 0 }
+})
+const emit = defineEmits(['click', 'play'])
+const missingArt = ref(false)
+const initial = computed(() => Array.from((props.item.name || '').trim())[0] || '♪')
+watch(() => props.item.picUrl, () => { missingArt.value = false })
+
+const subValue = computed(() => {
+	const s = props.sub
+	if (s === 'artist') return props.item.artist || props.item.creator || ''
+	if (s === 'count') {
+		const n = props.item.trackCount || props.item.songCount || props.item.albumCount
+		return n ? fmtCount(n) + (props.type === 'artist' ? ' 张专辑' : ' 首') : ''
+	}
+	if (s === 'description') return props.item.description || ''
+	return ''
+})
+</script>
+
+<style scoped>
+.cover-card {
+	display: flex;
+	flex-direction: column;
+	width: 110px;
+}
+.cover-wrap {
+	position: relative;
+	margin-bottom: 8px;
+	width: 110px;
+	height: 110px;
+}
+.placeholder {
+	width: 100%;
+	height: 100%;
+	border-radius: 12px;
+	background-color: var(--secondary-bg);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.placeholder.round {
+	border-radius: 50%;
+}
+.placeholder-glyph {
+	font-size: 28px;
+	font-weight: 600;
+	color: var(--primary);
+}
+.play-badge {
+	position: absolute;
+	right: 7px;
+	bottom: 7px;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background-color: rgba(19, 25, 45, 0.62);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.title {
+	font-size: 13px;
+	font-weight: 400;
+	color: var(--text);
+	line-height: 18px;
+}
+.sub {
+	font-size: 11px;
+	color: var(--text);
+	opacity: 0.58;
+	line-height: 16px;
+	margin-top: 1px;
+}
+</style>

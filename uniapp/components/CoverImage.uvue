@@ -1,0 +1,44 @@
+<template>
+	<image :src="displaySrc" :mode="mode" @error="recover" />
+</template>
+
+<script setup>
+import { repairCover } from '../common/cover.js'
+
+const props = defineProps({
+	src: { type: String, default: '' },
+	mode: { type: String, default: 'aspectFill' },
+	fallback: { type: String, default: '/static/icons/list-pri.png' }
+})
+const emit = defineEmits(['unavailable'])
+const displaySrc = ref('')
+let revision = 0
+let tried = false
+
+watch(() => props.src, (url) => {
+	revision++
+	tried = false
+	displaySrc.value = url
+}, { immediate: true })
+
+function recover() {
+	if (displaySrc.value === props.fallback) return
+	const url = props.src
+	if (tried || !/^https?:\/\//i.test(url)) {
+		useFallback()
+		return
+	}
+	tried = true
+	const current = revision
+	repairCover(url).then((source) => {
+		if (current !== revision) return
+		if (source) displaySrc.value = source
+		else useFallback()
+	})
+}
+
+function useFallback() {
+	displaySrc.value = props.fallback
+	emit('unavailable')
+}
+</script>

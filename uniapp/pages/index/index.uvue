@@ -1,0 +1,273 @@
+<template>
+	<view class="page" :class="themeClass" :style="{ minHeight: pageHeight + 'px' }">
+		<!-- 首次启动：未连接服务端 -->
+		<view v-if="!configured" class="setup" :style="{ minHeight: pageHeight + 'px', paddingTop: statusBar + 24 + 'px', paddingBottom: safeBottom() + 24 + 'px' }">
+			<view class="setup-body">
+				<view class="setup-hero">
+					<view class="setup-ring setup-ring-outer"></view>
+					<view class="setup-ring setup-ring-inner"></view>
+					<image class="setup-icon" src="/static/app-icons/icon-192.png" mode="aspectFit" />
+					<text class="setup-brand">FreeMusic</text>
+				</view>
+				<text class="setup-title">连接你的音乐库</text>
+				<text class="setup-desc">通过 Navidrome，把自己的曲库带到手机上。</text>
+				<view class="setup-btn press" @click="goSettings">
+					<text class="setup-btn-label">连接服务器</text>
+					<AppIcon name="arrow-right" color="light" :size="18" />
+				</view>
+				<view class="setup-help press" @click="openTutorial">
+					<text class="setup-help-label">没有服务器？查看部署教程</text>
+					<AppIcon name="arrow-right" color="primary" :size="16" />
+				</view>
+			</view>
+		</view>
+
+		<block v-else>
+			<view class="header" :class="themeClass" :style="{ paddingTop: statusBar + 'px' }">
+				<view class="hbar">
+					<text class="brand">Free<text class="accent">Music</text></text>
+					<view class="actions">
+						<view class="act-btn press" @click="openSearch">
+							<AppIcon name="search" :size="21" />
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<!-- 占位：把内容推到固定 header 之下 -->
+			<view :style="{ height: headerH + 'px' }"></view>
+			<view v-show="tab === 'home'" class="scroll">
+				<HomeTab ref="homeTab" :active="tab === 'home'" />
+			</view>
+			<view v-show="tab === 'explore'" class="explore-slot" :style="{ top: headerH + 'px', bottom: bottomH + 'px' }">
+				<ExploreTab ref="exploreTab" :active="tab === 'explore'" />
+			</view>
+			<view v-show="tab === 'library'" class="scroll">
+				<LibraryTab ref="libraryTab" :active="tab === 'library'" />
+			</view>
+			<!-- 占位：给迷你播放器 + 底部导航留白 -->
+			<view :style="{ height: bottomH + 'px' }"></view>
+
+			<MiniPlayer :with-nav="true" />
+			<BottomNav :active="tab" @change="switchTab" />
+		</block>
+	</view>
+</template>
+
+<script setup>
+import AppIcon from '../../components/AppIcon.uvue'
+import BottomNav from '../../components/BottomNav.uvue'
+import MiniPlayer from '../../components/MiniPlayer.uvue'
+import HomeTab from '../../components/tabs/HomeTab.uvue'
+import ExploreTab from '../../components/tabs/ExploreTab.uvue'
+import LibraryTab from '../../components/tabs/LibraryTab.uvue'
+import {
+	statusBarHeight,
+	headerHeight,
+	refreshSafeArea,
+	currentWindowHeight,
+	navBarHeight,
+	miniPlayerHeight,
+	safeBottom
+} from '../../common/config.js'
+import { settings, player, appState, useTheme } from '../../common/store.js'
+import { openSearch, goSettings } from '../../common/actions.js'
+import { isConfigured } from '../../common/api.js'
+
+const tab = ref('home')
+const homeTab = ref(null)
+const exploreTab = ref(null)
+const libraryTab = ref(null)
+
+const themeClass = computed(() => useTheme().themeClass())
+const statusBar = computed(() => statusBarHeight())
+const configured = computed(
+	() => !!(
+		settings.navidrome.server &&
+		settings.navidrome.username &&
+		settings.navidrome.password
+	)
+)
+const headerH = computed(() => headerHeight())
+const pageHeight = computed(() => currentWindowHeight())
+const bottomH = computed(() => navBarHeight() + (player.visible ? miniPlayerHeight() + 6 : 6))
+
+watch(() => appState.configVersion, () => {
+	nextTick(() => {
+		if (homeTab.value && homeTab.value.reload) homeTab.value.reload()
+		if (exploreTab.value && exploreTab.value.reload) exploreTab.value.reload()
+		if (libraryTab.value && libraryTab.value.reload) libraryTab.value.reload()
+	})
+})
+
+onPageShow(() => {
+	refreshSafeArea()
+	if (!isConfigured()) {
+		tab.value = 'home'
+	} else if (tab.value === 'home' && homeTab.value) {
+		homeTab.value.refreshIfNeeded()
+	} else if (tab.value === 'library' && libraryTab.value && libraryTab.value.reload) {
+		libraryTab.value.reload()
+	}
+})
+
+onReady(refreshSafeArea)
+onResize(refreshSafeArea)
+
+function switchTab(key) {
+	tab.value = key
+}
+
+function openTutorial() {
+	uni.navigateTo({ url: '/pages/tutorial/tutorial' })
+}
+
+</script>
+
+<style scoped>
+.page {
+	background-color: var(--bg);
+}
+.header {
+	position: fixed;
+	left: 0;
+	right: 0;
+	top: 0;
+	z-index: 90;
+	background-color: var(--bg);
+}
+.hbar {
+	height: 48px;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding-left: 16px;
+	padding-right: 8px;
+}
+.brand {
+	font-size: 20px;
+	font-weight: 600;
+	color: var(--text);
+	letter-spacing: -0.4px;
+}
+.accent {
+	color: var(--primary);
+}
+.actions {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+.act-btn {
+	width: 40px;
+	height: 40px;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	border-radius: 20px;
+}
+.scroll {
+	width: 100%;
+}
+.explore-slot {
+	position: fixed;
+	left: 0;
+	right: 0;
+}
+.setup {
+	background-color: var(--bg);
+	width: 100%;
+	align-items: center;
+	justify-content: center;
+	padding-left: 24px;
+	padding-right: 24px;
+}
+.setup-body {
+	width: 100%;
+	max-width: 420px;
+}
+.setup-hero {
+	position: relative;
+	height: 210px;
+	overflow: hidden;
+	border-radius: 26px;
+	background-color: #22398e;
+	background: linear-gradient(to right, #192d7a 0%, #335eea 100%);
+	align-items: center;
+	justify-content: center;
+}
+.setup-ring {
+	position: absolute;
+	border-width: 1px;
+	border-style: solid;
+	border-color: rgba(255, 255, 255, 0.22);
+}
+.setup-ring-outer {
+	width: 246px;
+	height: 246px;
+	border-radius: 123px;
+	top: -90px;
+	right: -54px;
+}
+.setup-ring-inner {
+	width: 182px;
+	height: 182px;
+	border-radius: 91px;
+	top: -58px;
+	right: -22px;
+}
+.setup-icon {
+	width: 70px;
+	height: 70px;
+}
+.setup-brand {
+	margin-top: 12px;
+	font-size: 24px;
+	font-weight: 600;
+	color: #ffffff;
+}
+.setup-title {
+	font-size: 28px;
+	font-weight: 600;
+	color: var(--text);
+	margin-top: 28px;
+}
+.setup-desc {
+	font-size: 14px;
+	color: var(--text);
+	opacity: 0.58;
+	line-height: 22px;
+	margin-top: 8px;
+}
+.setup-btn {
+	margin-top: 24px;
+	width: 100%;
+	height: 52px;
+	border-radius: 14px;
+	background-color: var(--primary);
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0 16px;
+}
+.setup-btn-label {
+	color: #ffffff;
+	font-size: 15px;
+	font-weight: 500;
+}
+.setup-help {
+	min-height: 48px;
+	margin-top: 8px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0 16px;
+}
+.setup-help-label {
+	color: var(--primary);
+	font-size: 14px;
+}
+</style>

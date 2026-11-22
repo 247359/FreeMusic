@@ -1,0 +1,61 @@
+<template>
+	<view class="section" :class="{ tight: props.tight }">
+		<text class="title">{{ props.title }}</text>
+		<view class="section-actions">
+			<TrackSelectionButton :tracks="props.tracks" />
+			<view v-if="props.more" class="more press" @click="emit('more')">
+				<text class="more-text">更多</text>
+				<AppIcon name="arrow-right" :size="13" :opacity="0.68" />
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup>
+import TrackSelectionButton from './TrackSelectionButton.uvue'
+import AppIcon from './AppIcon.uvue'
+
+const props = defineProps({
+	title: { type: String, required: true },
+	tracks: { type: Array, default: () => [] },
+	more: { type: Boolean, default: false },
+	/** 作为行内标题使用时不带底部间距（由父级控制） */
+	tight: { type: Boolean, default: false }
+})
+const emit = defineEmits(['more'])
+</script>
+
+<style scoped>
+.section {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-end;
+	justify-content: space-between;
+	margin-bottom: 14px;
+}
+.tight {
+	margin-bottom: 0;
+}
+.title {
+	font-size: 20px;
+	font-weight: 600;
+	color: var(--text);
+	line-height: 26px;
+}
+.section-actions {
+	flex-direction: row;
+	align-items: center;
+}
+.more {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+.more-text {
+	font-size: 12px;
+	font-weight: 400;
+	color: var(--text);
+	opacity: 0.68;
+	margin-right: 2px;
+}
+</style>

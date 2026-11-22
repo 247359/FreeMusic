@@ -1,0 +1,343 @@
+<template>
+	<view class="explore">
+		<view class="mix press" @click="goList('rediscover', '', '少听的歌')">
+			<view class="mix-copy">
+				<text class="mix-title">少听的歌</text>
+				<text class="mix-sub">从曲库里挑一些平时少放的歌</text>
+			</view>
+			<view class="mix-icon"><AppIcon name="shuffle" color="primary" :size="22" /></view>
+		</view>
+
+		<view class="tabs">
+			<view class="section-tabs">
+				<view v-for="(item, index) in tabs" :key="item.key" class="section-tab press" @click="currentPage = index">
+					<view class="section-tab-copy">
+						<text class="section-tab-label" :class="{ selected: currentPage === index }" :max-lines="1">{{ item.label }}</text>
+					</view>
+					<view class="section-tab-mark" :class="{ visible: currentPage === index }"></view>
+				</view>
+			</view>
+		</view>
+
+		<swiper class="pager" :current="currentPage" :duration="230" @change="onPageChange">
+			<swiper-item v-for="tab in tabs" :key="tab.key">
+				<scroll-view class="pager-scroll" scroll-y :show-scrollbar="false" @scrolltolower="onScrollBottom(tab.key)">
+					<view class="content">
+						<PageState :loading="panes[tab.key].loading" :error="panes[tab.key].error" @retry="load(tab.key)">
+							<view v-if="tab.key === 'genre'">
+								<view v-if="panes[tab.key].items.length" class="genre-grid">
+									<view v-for="genre in panes[tab.key].items" :key="genre.name" class="genre-tile press" @click="goList('genre', genre.name, genreLabel(genre.name))">
+										<text class="genre-title ellipsis">{{ genreLabel(genre.name) }}</text>
+										<view class="genre-bottom">
+											<text class="caption">{{ genre.songCount }} 首歌曲</text>
+											<AppIcon name="arrow-right" color="primary" :size="14" />
+										</view>
+									</view>
+								</view>
+								<view v-else class="feed-state"><text class="caption">曲库还没有流派标签。</text></view>
+								<view class="years">
+									<SectionTitle title="按年代听" />
+									<view class="genre-grid">
+										<view v-for="period in periods" :key="period.range" class="genre-tile year-tile press" @click="goList('years', period.range, period.label)">
+											<text class="genre-title">{{ period.label }}</text>
+											<AppIcon name="arrow-right" color="primary" :size="14" />
+										</view>
+									</view>
+								</view>
+							</view>
+							<view v-else-if="panes[tab.key].items.length" class="grid">
+								<CoverCard
+									v-for="item in panes[tab.key].items"
+									:key="tab.key + item.id"
+									:item="item"
+									:type="tab.key"
+									:width="cardWidth"
+									:gap="10"
+									:sub="tab.key === 'artist' ? 'count' : 'artist'"
+									@click="goDetail(tab.key, item)"
+									@play="playCollection(tab.key, item.id, { name: item.name })"
+								/>
+							</view>
+							<view v-else class="feed-state">
+								<text class="caption">曲库还没有可展示的内容。</text>
+							</view>
+							<view v-if="tab.key === 'album' && (loadingMore || moreError || (panes.album.items.length && !hasMore))"
+								class="feed-footer" @click="retryMore">
+								<text class="caption">{{ loadingMore ? '正在加载…' : moreError ? '续载失败，点击重试' : '没有更多了' }}</text>
+							</view>
+						</PageState>
+					</view>
+				</scroll-view>
+			</swiper-item>
+		</swiper>
+	</view>
+</template>
+
+<script setup>
+import AppIcon from '../AppIcon.uvue'
+import PageState from '../PageState.uvue'
+import CoverCard from '../CoverCard.uvue'
+import SectionTitle from '../SectionTitle.uvue'
+import { windowWidth } from '../../common/config.js'
+import * as api from '../../common/api.js'
+import { goDetail, goList, playCollection } from '../../common/actions.js'
+import { genreLabel } from '../../common/format.js'
+
+const props = defineProps({ active: { type: Boolean, default: false } })
+const tabs = [
+	{ key: 'genre', label: '流派' },
+	{ key: 'artist', label: '歌手' },
+	{ key: 'album', label: '最近入库专辑' }
+]
+const periods = [
+	{ range: '1-1999', label: '2000 年以前' },
+	{ range: '2000-2009', label: '2000–2009' },
+	{ range: '2010-2019', label: '2010–2019' },
+	{ range: '2020-9999', label: '2020 年以来' }
+]
+const currentPage = ref(0)
+const pageSize = 30
+
+function emptyPane() {
+	return { items: [], loading: false, error: '', refreshedAt: 0 }
+}
+
+const panes = reactive({ genre: emptyPane(), artist: emptyPane(), album: emptyPane() })
+const loadingMore = ref(false)
+const moreError = ref(false)
+const hasMore = ref(false)
+let offset = 0
+let generation = 0
+
+const cardWidth = Math.floor((windowWidth - 32 - 20) / 3)
+const requests = {
+	genre: api.getGenres,
+	artist: api.getAllArtists,
+	album: () => api.getAlbumList2('newest', pageSize, 0)
+}
+
+watch(() => props.active, (active) => {
+	if (active) warmPages()
+}, { immediate: true })
+
+function onPageChange(event) {
+	const index = event.detail.current
+	if (Number.isInteger(index) && index >= 0 && index < tabs.length) currentPage.value = index
+}
+
+function warmPages() {
+	for (const tab of tabs) {
+		if (!panes[tab.key].refreshedAt) load(tab.key)
+	}
+	const key = tabs[currentPage.value].key
+	if (Date.now() - panes[key].refreshedAt > 60000) load(key)
+}
+
+function reload() {
+	generation++
+	for (const tab of tabs) panes[tab.key] = emptyPane()
+	currentPage.value = 0
+	hasMore.value = false
+	offset = 0
+	loadingMore.value = false
+	moreError.value = false
+	if (props.active) warmPages()
+}
+
+defineExpose({ reload })
+
+function load(key) {
+	const pane = panes[key]
+	if (pane.loading || (key === 'album' && loadingMore.value)) return
+	const version = generation
+	pane.loading = true
+	pane.error = ''
+	if (key === 'album') {
+		moreError.value = false
+		hasMore.value = false
+		offset = 0
+	}
+	requests[key]().then((list) => {
+		if (version !== generation) return
+		pane.items = list
+		pane.refreshedAt = Date.now()
+		if (key === 'album') {
+			offset = list.length
+			hasMore.value = list.length === pageSize
+		}
+	}).catch((e) => {
+		if (version === generation) pane.error = e.message || '加载失败'
+	}).finally(() => {
+		if (version === generation) pane.loading = false
+	})
+}
+
+function onScrollBottom(key) {
+	if (key === 'album') loadMore()
+}
+
+function retryMore() {
+	if (moreError.value) loadMore()
+}
+
+function loadMore() {
+	const pane = panes.album
+	if (!props.active || tabs[currentPage.value].key !== 'album' || pane.loading || loadingMore.value || !hasMore.value) return
+	const version = generation
+	loadingMore.value = true
+	moreError.value = false
+	api.getAlbumList2('newest', pageSize, offset).then((list) => {
+		if (version !== generation) return
+		const ids = new Set(pane.items.map((item) => item.id))
+		const fresh = list.filter((item) => !ids.has(item.id))
+		pane.items = pane.items.concat(fresh)
+		offset += list.length
+		hasMore.value = list.length === pageSize
+	}).catch(() => {
+		if (version === generation) moreError.value = true
+	}).finally(() => {
+		if (version === generation) loadingMore.value = false
+	})
+}
+</script>
+
+<style scoped>
+.explore {
+	width: 100%;
+	height: 100%;
+	padding-top: 12px;
+}
+.mix {
+	margin-left: 16px;
+	margin-right: 16px;
+	min-height: 92px;
+	border-radius: 16px;
+	padding: 16px;
+	background-color: var(--primary-bg);
+	flex-direction: row;
+	align-items: center;
+}
+.mix-copy {
+	flex: 1;
+}
+.mix-title {
+	font-size: 21px;
+	font-weight: 600;
+	color: #192b55;
+}
+.mix-sub {
+	margin-top: 6px;
+	font-size: 12px;
+	color: #344778;
+}
+.mix-icon {
+	width: 40px;
+	height: 40px;
+	border-radius: 12px;
+	background-color: #f5f7ff;
+	align-items: center;
+	justify-content: center;
+}
+.tabs {
+	margin-left: 16px;
+	margin-right: 16px;
+	margin-top: 18px;
+	margin-bottom: 12px;
+	flex-direction: row;
+}
+.pager {
+	flex: 1;
+	height: 0;
+	min-height: 0;
+}
+.pager-scroll {
+	height: 100%;
+}
+.content {
+	padding: 0 16px 16px;
+}
+.genre-grid, .grid {
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+.genre-grid {
+	justify-content: space-between;
+}
+.genre-tile {
+	width: calc(50% - 5px);
+	background-color: var(--secondary-bg);
+	border-radius: 12px;
+	margin-bottom: 10px;
+	padding: 14px;
+}
+.genre-title {
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--text);
+}
+.genre-bottom {
+	margin-top: 12px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+.years {
+	margin-top: 20px;
+}
+.year-tile {
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: center;
+}
+.caption {
+	font-size: 12px;
+	color: var(--text);
+	opacity: 0.64;
+}
+.feed-state {
+	padding: 26px 0;
+	align-items: center;
+}
+.feed-footer {
+	padding: 18px 0;
+	align-items: center;
+}
+.section-tabs {
+	width: 100%;
+	height: 44px;
+	flex-direction: row;
+}
+.section-tab {
+	flex: 1;
+	min-width: 0;
+	align-items: center;
+}
+.section-tab-copy {
+	height: 37px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+}
+.section-tab-label {
+	font-size: 14px;
+	color: var(--text);
+	opacity: 0.64;
+	text-overflow: ellipsis;
+}
+.section-tab-label.selected {
+	font-size: 15px;
+	color: var(--section-active);
+	opacity: 1;
+}
+.section-tab-mark {
+	width: 16px;
+	height: 2px;
+	border-radius: 1px;
+	background-color: var(--section-active);
+	opacity: 0;
+}
+.section-tab-mark.visible {
+	opacity: 1;
+}
+</style>

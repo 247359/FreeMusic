@@ -1,0 +1,187 @@
+<template>
+	<view class="page" :class="themeClass">
+		<NavHeader :title="album.name || '专辑'">
+			<template #right>
+				<AppIcon
+					:name="liked ? 'heart-solid' : 'heart'"
+					:color="liked ? 'primary' : 'text'"
+					:size="20"
+					@click="like"
+				/>
+				<TrackSelectionButton :tracks="tracks" />
+			</template>
+		</NavHeader>
+		<view :style="{ height: headerH + 'px' }"></view>
+		<scroll-view class="scroll" :show-scrollbar="false" scroll-y :style="{ top: headerH + 'px', bottom: bottomH + 'px' }">
+			<PageState :loading="loading" :error="error" @retry="load">
+				<view class="info">
+					<image v-if="album.picUrl" class="cover cover-img" :src="album.picUrl" mode="aspectFill"></image>
+					<view v-else class="cover placeholder"><AppIcon name="music-note" color="primary" :size="40" :opacity="0.6" /></view>
+					<text class="name">{{ album.name }}</text>
+					<text class="artist press" @click="goArtist">{{ album.artist }}</text>
+					<text class="meta">{{ album.year || '—' }} · {{ tracks.length }} 首</text>
+					<view class="buttons">
+						<view class="play-all press" @click="playAll">
+							<AppIcon name="play" color="light" :size="16" />
+							<text class="btn-text">播放全部</text>
+						</view>
+					</view>
+				</view>
+				<view class="list">
+					<TrackList :tracks="tracks" @play="playAt" @more="onTrackMore" />
+				</view>
+			</PageState>
+		</scroll-view>
+		<MiniPlayer :with-nav="false" />
+	</view>
+</template>
+
+<script setup>
+import TrackSelectionButton from '../../components/TrackSelectionButton.uvue'
+import NavHeader from '../../components/NavHeader.uvue'
+import PageState from '../../components/PageState.uvue'
+import TrackList from '../../components/TrackList.uvue'
+import MiniPlayer from '../../components/MiniPlayer.uvue'
+import AppIcon from '../../components/AppIcon.uvue'
+import { headerHeight, miniPlayerClearance } from '../../common/config.js'
+import { player, themeState } from '../../common/store.js'
+import * as api from '../../common/api.js'
+import { setQueue } from '../../common/player.js'
+import { goDetail, showTrackMenu } from '../../common/actions.js'
+import { toast } from '../../common/format.js'
+
+const id = ref('')
+const album = ref({})
+const tracks = ref([])
+const liked = ref(false)
+const loading = ref(true)
+const error = ref('')
+
+const themeClass = computed(() => (themeState.isDark ? 'theme-dark' : 'theme-light'))
+const headerH = computed(() => headerHeight())
+const bottomH = computed(() => miniPlayerClearance(player.visible) + 8)
+
+onLoad((options) => {
+	id.value = decodeURIComponent(options.id || '')
+	load()
+})
+
+function onTrackMore(e) {
+	showTrackMenu(e && e.track)
+}
+
+function load() {
+	loading.value = true
+	error.value = ''
+	api
+		.getAlbumDetail(id.value)
+		.then((data) => {
+			album.value = data.album || {}
+			tracks.value = data.tracks || []
+			liked.value = !!album.value.liked
+			loading.value = false
+		})
+		.catch((e) => {
+			error.value = e.message || '加载失败'
+			loading.value = false
+		})
+}
+
+function playAll() {
+	setQueue(tracks.value, 0, { name: album.value.name, id: id.value, type: 'album' })
+}
+
+function playAt(i) {
+	setQueue(tracks.value, i, { name: album.value.name, id: id.value, type: 'album' })
+}
+
+function goArtist() {
+	if (album.value.artistId) {
+		goDetail('artist', { id: album.value.artistId, name: album.value.artist })
+	}
+}
+
+function like() {
+	const next = !liked.value
+	api
+		.likeAlbum(id.value, next)
+		.then(() => {
+			liked.value = next
+			toast(next ? '已收藏专辑' : '已取消收藏')
+		})
+		.catch((e) => toast(e.message || '操作失败'))
+}
+</script>
+
+<style scoped>
+.page {
+	height:  100%;
+	background-color: var(--bg);
+}
+.scroll {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+}
+.info {
+	padding: 24px 20px 20px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	background: linear-gradient(180deg, var(--secondary-bg) 0%, var(--bg) 100%);
+}
+.cover {
+	width: 160px;
+	height: 160px;
+	border-radius: 12px;
+	box-shadow: 0 16px 28px -10px var(--shadow);
+}
+.placeholder {
+	background-color: var(--secondary-bg);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.name {
+	font-size: 22px;
+	font-weight: 600;
+	color: var(--text);
+	text-align: center;
+	margin-top: 20px;
+	line-height: 30px;
+}
+.artist {
+	font-size: 14px;
+	font-weight: 400;
+	color: var(--primary);
+	margin-top: 6px;
+}
+.meta {
+	font-size: 12px;
+	color: var(--text);
+	opacity: 0.58;
+	margin-top: 5px;
+}
+.buttons {
+	margin-top: 20px;
+}
+.play-all {
+	height: 40px;
+	padding: 0 22px;
+	border-radius: 8px;
+	background-color: var(--primary);
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+}
+.btn-text {
+	color: #ffffff;
+	font-size: 14px;
+	font-weight: 400;
+	margin-left: 8px;
+}
+.list {
+	padding: 8px 16px 20px;
+}
+</style>

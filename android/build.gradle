@@ -1,0 +1,51 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+buildscript {
+    dependencies {
+        classpath(files('../.dcloud/plugins/uts-kotlin-compiler-plugin-0.0.1.jar'))
+        classpath(files('../.dcloud/plugins/uts-kotlin-gradle-plugin-0.0.1.jar'))
+        classpath(files('../.dcloud/plugins/auto-register-gradle-plugin-1.0.0.jar'))
+    }
+}
+
+plugins {
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.library) apply false
+    alias(libs.plugins.kotlin.android) apply false
+    id 'com.google.devtools.ksp' version '2.3.11' apply false
+}
+
+// DCloud Vapor base SDK, followed by the modules used by FreeMusic.
+ext.uniAppSdk = files([
+        'app-runtime-release',
+        'app-common-release',
+        'breakpad-build-release',
+        'uts-runtime-release',
+        'ext-component-release',
+        'uni-dialogPage-release',
+        'uni-event-release',
+        'uni-crash-release',
+        'uni-getElementById-release',
+        'uni-pullDownRefresh-release',
+        'uni-storage-release',
+        'uni-exit-release',
+        'uni-theme-release',
+        'uni-getAppBaseInfo-release',
+        'uni-getDeviceInfo-release',
+        'uni-getSystemInfo-release',
+        'uni-getAccessibilityInfo-release',
+        'uni-getAppAuthorizeSetting-release',
+        'uni-getSystemSetting-release',
+        'uni-openAppAuthorizeSetting-release',
+        'uni-prompt-release',
+        'uni-rpx2px-release',
+        'uni-secure-network-release',
+        'uni-uasm-release',
+        'uni-convert2AbsFullPath-release',
+        'uni-network-release',
+        'uni-arrayBufferToBase64-release',
+        'uni-getBackgroundAudioManager-release',
+        'uni-createInnerAudioContext-release',
+        'uni-form-release',
+        'uni-actionSheet-release',
+        'uni-modal-release'
+].collect { name -> file("../.dcloud/SDK/libs/${name}.aar") })
