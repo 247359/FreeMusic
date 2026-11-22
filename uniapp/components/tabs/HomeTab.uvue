@@ -28,7 +28,9 @@
 		<view class="block">
 			<SectionTitle title="每日推荐" :tracks="preview" :more="daily.length > 6" @more="goList('album', 'daily', '每日推荐')" />
 			<PageState :loading="loading" :error="error" @retry="load">
-				<TrackList v-if="daily.length" :tracks="preview" @play="playDaily" @more="showTrackMenu($event.track)" />
+				<TrackList v-if="daily.length" :tracks="preview"
+					:show-end="daily.length <= preview.length" :footer-text="daily.length > preview.length ? '查看更多推荐' : ''"
+					@play="playDaily" @more="showTrackMenu($event.track)" @footer="openDailyMore" />
 				<text v-else class="empty-text">添加歌曲后，这里会显示当天的推荐。</text>
 			</PageState>
 		</view>
@@ -58,6 +60,10 @@ const current = computed(() => currentTrack())
 const art = computed(() => current.value ? current.value.thumbUrl || current.value.picUrl : '')
 const recent = computed(() => history.list.slice(0, 8))
 const preview = computed(() => daily.value.slice(0, 6))
+
+function openDailyMore() {
+	if (daily.value.length > preview.value.length) goList('album', 'daily', '每日推荐')
+}
 const listenSubtitle = computed(() => {
 	const track = current.value
 	if (!track) return '边听边发现'

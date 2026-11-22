@@ -489,17 +489,27 @@ export function search(keyword, limit = 30) {
 	if (!q) return Promise.resolve({ songs: [], albums: [], artists: [], playlists: [] })
 	return request('search3', {
 		query: q,
-		songCount: limit,
-		albumCount: limit,
-		artistCount: limit,
-		playlistCount: limit
+		songCount: limit + 1,
+		albumCount: limit + 1,
+		artistCount: limit + 1,
+		playlistCount: limit + 1
 	}).then((res) => {
 		const r = res.searchResult3 || {}
+		const songs = arr(r.song)
+		const albums = arr(r.album)
+		const artists = arr(r.artist)
+		const playlists = arr(r.playlist)
 		return {
-			songs: arr(r.song).map(toTrack),
-			albums: arr(r.album).map(toAlbum),
-			artists: arr(r.artist).map(toArtist),
-			playlists: arr(r.playlist).map(toPlaylist)
+			songs: songs.slice(0, limit).map(toTrack),
+			albums: albums.slice(0, limit).map(toAlbum),
+			artists: artists.slice(0, limit).map(toArtist),
+			playlists: playlists.slice(0, limit).map(toPlaylist),
+			truncated: {
+				songs: songs.length > limit,
+				albums: albums.length > limit,
+				artists: artists.length > limit,
+				playlists: playlists.length > limit
+			}
 		}
 	})
 }
@@ -522,6 +532,14 @@ export async function getLibraryTrackCount(loadedCount) {
 export function getGenreTracks(genre, offset, count) {
 	return request('getSongsByGenre', { genre, offset, count })
 		.then((res) => arr(res.songsByGenre && res.songsByGenre.song).map(toTrack))
+}
+
+export async function getGenreTrackCount(genre, loadedCount) {
+	const genres = await getGenres()
+	const count = genres.find((item) => item.name === genre)?.songCount
+	if (!Number.isSafeInteger(count) || count < loadedCount || count < 1) return null
+	const boundary = await getGenreTracks(genre, count - 1, 2)
+	return boundary.length === 1 ? count : null
 }
 
 export function getHotKeywords() {

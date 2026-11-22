@@ -138,8 +138,11 @@ function load() {
 		if (id !== requestId) return
 		tracks.value = list || []
 		loading.value = false
-		if (from.value === 'library' && !query.value && hasMore.value) {
-			api.getLibraryTrackCount(tracks.value.length).then((count) => {
+		if (paged.value && !query.value && hasMore.value) {
+			const countRequest = from.value === 'genre'
+				? api.getGenreTrackCount(listType.value, tracks.value.length)
+				: api.getLibraryTrackCount(tracks.value.length)
+			countRequest.then((count) => {
 				if (id === requestId && hasMore.value && count != null && count >= tracks.value.length) {
 					libraryTrackCount.value = count
 				}

@@ -28,7 +28,7 @@
 			<view v-if="!searched" class="content">
 				<view v-if="suggest.length" class="block">
 					<SectionTitle title="搜索建议" :tracks="suggest" />
-					<TrackList :tracks="suggest" @play="playSuggest" @more="onTrackMore" />
+					<TrackList :tracks="suggest" :show-end="false" @play="playSuggest" @more="onTrackMore" />
 				</view>
 				<view v-if="!suggest.length && hotKeywords.length > 0" class="block">
 					<SectionTitle title="曲库流派" />
@@ -60,8 +60,9 @@
 				</view>
 				<PageState :loading="loading" :error="error" @retry="doSearch">
 					<view v-if="resultTab === 'songs'" class="result">
-						<SectionTitle :title="'找到 ' + results.songs.length + ' 首歌曲'" :tracks="results.songs" :tight="true" />
-						<TrackList :tracks="results.songs" :show-album="true" @play="playResult" @more="onTrackMore" />
+						<SectionTitle :title="songResultTitle" :tracks="results.songs" :tight="true" />
+						<TrackList :tracks="results.songs" :show-album="true" :show-end="!results.truncated?.songs"
+							:footer-text="results.truncated?.songs ? '还有更多结果，可缩小搜索范围' : ''" @play="playResult" @more="onTrackMore" />
 					</view>
 					<view v-else class="grid">
 						<CoverCard
@@ -77,6 +78,7 @@
 						/>
 						<view v-if="!currentResults.length" class="empty"><text class="empty-text">没有找到相关内容</text></view>
 					</view>
+					<text v-if="resultTab !== 'songs' && resultTruncated" class="result-limit">仅显示前 {{ currentResults.length }} 项，可缩小搜索范围</text>
 				</PageState>
 			</view>
 		</scroll-view>
@@ -138,6 +140,10 @@ const headerH = computed(() => headerHeight())
 const bottomH = computed(() => miniPlayerClearance(player.visible) + 8)
 const cardWidth = computed(() => Math.floor((windowWidth - 32 - 20) / 3))
 const currentResults = computed(() => results.value[resultTab.value] || [])
+const resultTruncated = computed(() => !!results.value.truncated?.[resultTab.value])
+const songResultTitle = computed(() =>
+	(results.value.truncated?.songs ? '显示前 ' : '找到 ') + results.value.songs.length + ' 首歌曲'
+)
 const cardType = computed(() => ({ albums: 'album', artists: 'artist', playlists: 'playlist' }[resultTab.value] || resultTab.value))
 
 onLoad(() => {
@@ -246,6 +252,13 @@ function back() {
 </script>
 
 <style scoped>
+.result-limit {
+	color: var(--text);
+	opacity: 0.5;
+	font-size: 12px;
+	text-align: center;
+	padding: 18px 0;
+}
 .page {
 	height:  100%;
 	background-color: var(--bg);
