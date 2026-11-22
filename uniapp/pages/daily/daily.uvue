@@ -16,7 +16,7 @@
 				<view class="hero">
 					<text class="date">{{ subtitle }}</text>
 					<text class="hero-title">{{ title }}</text>
-					<text class="hero-sub">{{ tracks.length }} 首歌曲 · 来自你的音乐库</text>
+					<text class="hero-sub">{{ trackCountLabel }}</text>
 					<view v-if="tracks.length" class="play-actions">
 						<view class="play-all press" @click="playAll">
 							<AppIcon name="play" color="light" :size="16" />
@@ -67,6 +67,12 @@ const showSearch = ref(false)
 const queryDraft = ref('')
 const query = ref('')
 const paged = computed(() => from.value === 'library' || from.value === 'genre')
+const libraryTrackCount = ref(null)
+const trackCountLabel = computed(() => {
+	const count = libraryTrackCount.value ?? tracks.value.length
+	const prefix = paged.value && hasMore.value && libraryTrackCount.value == null ? '已加载 ' : '共 '
+	return prefix + count + ' 首歌曲'
+})
 let requestId = 0
 
 const themeClass = computed(() => (themeState.isDark ? 'theme-dark' : 'theme-light'))
@@ -91,6 +97,7 @@ function load() {
 	loadingMore.value = false
 	moreError.value = ''
 	hasMore.value = false
+	libraryTrackCount.value = null
 	error.value = ''
 	let p
 	if (paged.value) {
@@ -131,6 +138,13 @@ function load() {
 		if (id !== requestId) return
 		tracks.value = list || []
 		loading.value = false
+		if (from.value === 'library' && !query.value && hasMore.value) {
+			api.getLibraryTrackCount(tracks.value.length).then((count) => {
+				if (id === requestId && hasMore.value && count != null && count >= tracks.value.length) {
+					libraryTrackCount.value = count
+				}
+			}).catch(() => {})
+		}
 	}).catch((e) => {
 		if (id !== requestId) return
 		error.value = e.message || '加载失败'
@@ -167,6 +181,7 @@ function loadMore() {
 		tracks.value = tracks.value.concat(fresh)
 		offset.value += list.length
 		hasMore.value = list.length === pageSize
+		if (!hasMore.value || libraryTrackCount.value < tracks.value.length) libraryTrackCount.value = null
 	}).catch(() => {
 		if (id === requestId) moreError.value = '加载失败，点击重试'
 	}).finally(() => {

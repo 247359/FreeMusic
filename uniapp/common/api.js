@@ -510,6 +510,15 @@ export function getLibraryTracks(offset, limit, query = '') {
 	}).then((res) => arr(res.searchResult3 && res.searchResult3.song).map(toTrack))
 }
 
+export async function getLibraryTrackCount(loadedCount) {
+	const { scanStatus } = await request('getScanStatus')
+	const count = scanStatus?.count
+	if (scanStatus?.scanning || !Number.isSafeInteger(count) || count < loadedCount || count < 1) return null
+	// The scan count can cover more libraries than this account can see.
+	const boundary = await getLibraryTracks(count - 1, 2)
+	return boundary.length === 1 ? count : null
+}
+
 export function getGenreTracks(genre, offset, count) {
 	return request('getSongsByGenre', { genre, offset, count })
 		.then((res) => arr(res.songsByGenre && res.songsByGenre.song).map(toTrack))
