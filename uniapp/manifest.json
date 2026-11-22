@@ -2,7 +2,7 @@
     "name" : "FreeMusic",
     "appid" : "__UNI__EB04E2D",
     "description" : "连接自建 Navidrome 音乐库的音乐播放器",
-    "versionName" : "1.0.0",
+    "versionName" : "1.0.0-beta",
     "versionCode" : "100",
     "uni-app-x" : {
         "vapor" : true,

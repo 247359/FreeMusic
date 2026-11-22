@@ -20,6 +20,14 @@
         tools:replace="android:name,android:allowBackup,android:theme">
         <meta-data android:name="com.gy.freemusic.ABI" android:value="${freeMusicAbi}" />
         <meta-data android:name="com.gy.freemusic.GITHUB_REPOSITORY" android:value="${freeMusicRepository}" />
+        <service
+            android:name="uts.sdk.modules.freemusicMedia3.PlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
         <provider
             android:name="uts.sdk.modules.freemusicComposeShare.ComposeFileProvider"
             android:authorities="${applicationId}.composefiles"

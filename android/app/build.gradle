@@ -15,7 +15,8 @@ def pluginExports = rootProject.file('../uniapp/unpackage/resources/app-android/
 def nativePluginSources = [
         'freemusic-media-volume',
         'freemusic-compose-share',
-        'freemusic-release'
+        'freemusic-release',
+        'freemusic-media3'
 ].collect { name -> new File(pluginExports, "${name}/utssdk/app-android/src") }
 def githubRepository = providers.gradleProperty('freemusic.githubRepository')
         .orElse(providers.environmentVariable('FREEMUSIC_GITHUB_REPOSITORY')).getOrElse('247359/FreeMusic')
@@ -106,8 +107,8 @@ dependencies {
     implementation project(':uniappx')
 
     implementation "androidx.tracing:tracing-ktx:1.3.0"
-    // 后台音频服务 DCloudUniGetBackgroundAudioManager.AudioService 依赖 MediaSessionCompat
-    implementation "androidx.media:media:1.0.0"
+    implementation "androidx.media3:media3-exoplayer:1.8.0"
+    implementation "androidx.media3:media3-session:1.8.0"
     implementation "androidx.core:core-ktx:1.10.1"
     implementation "androidx.appcompat:appcompat:1.7.0"
     implementation "androidx.constraintlayout:constraintlayout:2.2.1"
@@ -134,6 +135,5 @@ dependencies {
     implementation "com.squareup.okhttp3:okhttp:3.12.12"
 
 
-    implementation "com.google.android.exoplayer:exoplayer-core:2.18.0"
     implementation rootProject.ext.uniAppSdk
 }

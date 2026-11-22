@@ -1,0 +1,19 @@
+import Media3Audio from 'uts.sdk.modules.freemusicMedia3.Media3Audio'
+import { UTSAndroid } from 'io.dcloud.uts'
+
+export function onMedia3Event(listener: (event: string, position: number, duration: number) => void): void {
+	const context = UTSAndroid.getAppContext()
+	if (context != null) {
+		Media3Audio.initialize(context, (event: string, position: Double, duration: Double) => {
+			listener(event, position, duration)
+		})
+	}
+}
+
+export function loadMedia3(url: string, title: string, artist: string, artwork: string): void {
+	Media3Audio.load(url, title, artist, artwork)
+}
+
+export function controlMedia3(command: string, value: number): void {
+	Media3Audio.control(command, value.toDouble())
+}

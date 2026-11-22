@@ -2,15 +2,13 @@ package com.gy.freemusic
 
 import android.app.Activity
 import android.app.Application
-import android.content.Intent
 import android.media.AudioManager
 import android.os.Bundle
-import android.util.Log
 import io.dcloud.uniappxv.UniApplication
-import uts.sdk.modules.DCloudUniGetBackgroundAudioManager.AudioService
 import uts.sdk.modules.freemusicMediaVolume.UniUTSMethodRegister
 import uts.sdk.modules.freemusicComposeShare.UniUTSMethodRegister as ComposeShareRegister
 import uts.sdk.modules.freemusicRelease.UniUTSMethodRegister as ReleaseRegister
+import uts.sdk.modules.freemusicMedia3.UniUTSMethodRegister as Media3Register
 
 class FreeMusicApplication : UniApplication() {
     override fun onCreate() {
@@ -18,17 +16,10 @@ class FreeMusicApplication : UniApplication() {
         UniUTSMethodRegister.registerUTSMethod()
         ComposeShareRegister.registerUTSMethod()
         ReleaseRegister.registerUTSMethod()
+        Media3Register.registerUTSMethod()
         registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityResumed(activity: Activity) {
                 activity.volumeControlStream = AudioManager.STREAM_MUSIC
-                // The SDK player retains its service-start flag after Android removes the service.
-                if (AudioService.audioService == null) {
-                    try {
-                        activity.startService(Intent(activity, AudioService::class.java))
-                    } catch (error: IllegalStateException) {
-                        Log.w("FreeMusicAudio", "Audio service could not be restored while resuming", error)
-                    }
-                }
             }
 
             override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit

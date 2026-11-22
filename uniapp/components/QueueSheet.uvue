@@ -8,9 +8,10 @@
 				</view>
 				<AppIcon name="x" :size="20" :opacity="0.6" @click="emit('close')" />
 			</view>
-			<scroll-view class="list" :show-scrollbar="false" scroll-y>
+			<scroll-view class="list" :show-scrollbar="false" :scroll-into-view="scrollTarget" scroll-y>
 				<view
 					v-for="(t, i) in player.queue"
+					:id="'queue-track-' + i"
 					:key="t.id + '-' + i"
 					class="row"
 					:class="{ current: i === player.index }"
@@ -43,6 +44,16 @@ const emit = defineEmits(['close', 'play', 'remove'])
 
 const themeClass = computed(() => (themeState.isDark ? 'theme-dark' : 'theme-light'))
 const bottomInset = computed(() => 8 + safeBottom() + 'px')
+const scrollTarget = ref('')
+
+watch(() => props.show, async (show) => {
+	scrollTarget.value = ''
+	if (!show) return
+	await nextTick()
+	if (props.show && player.index >= 0 && player.index < player.queue.length) {
+		scrollTarget.value = 'queue-track-' + player.index
+	}
+}, { immediate: true })
 
 function editTrack(track, index) {
 	const options = []

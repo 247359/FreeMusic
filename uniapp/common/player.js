@@ -137,7 +137,7 @@ function handlePlayError() {
 	errorJumpTimer = setTimeout(() => {
 		errorJumpTimer = null
 		next(player.mode !== 'one')
-	}, 600)
+	}, 700)
 }
 
 export function initPlayerEngine() {
@@ -167,6 +167,12 @@ export function initPlayerEngine() {
 		timeupdate: (data) => {
 			applyTime(data)
 			persistSoon(1500)
+		},
+		seekunavailable: (data) => {
+			seekPreviewUntil = 0
+			applyTime(data)
+			savePlayerState()
+			toast('当前音频流不支持跳转')
 		},
 		canplay: (data) => {
 			sourceReady = true

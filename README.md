@@ -18,7 +18,7 @@ FreeMusic 是一款连接自建 Navidrome 曲库的 Android 音乐播放器。�
 ## 本地构建
 
 1. 安装 **JDK 17、Android SDK 36、HBuilderX 5.34.2026102909**。设置 `JAVA_HOME`，通过 `ANDROID_HOME` 或 Android Studio 配置 Android SDK。
-2. 下载 [DCloud Android 原生 SDK **5.34.2026102909（蒸汽模式）**](https://doc.dcloud.net.cn/uni-app-x/native/download/android.html)。将其中的 `SDK/libs` 和 `plugins` 分别放进 `.dcloud/SDK/libs` 和 `.dcloud/plugins`。
+2. 安装 Git LFS 后克隆仓库，在仓库根目录执行 `git lfs pull`。
 3. 在 HBuilderX 打开 `uniapp/`，选择 **发行 → 原生 App 本地打包 → 生成本地打包 App 资源**。回到仓库根目录运行以下命令（Windows 可用 Git Bash）：
 
    ```sh
@@ -34,12 +34,6 @@ FreeMusic 是一款连接自建 Navidrome 曲库的 Android 音乐播放器。�
 | `x86_64` | 模拟器验证了安装和播放，暂无实体设备测试。 |
 
 [DCloud 蒸汽模式不支持 32 位 x86](https://doc.dcloud.net.cn/uni-app-x/collocation/manifest-android.html)。
-
-## 发布与更新
-
-发布构建用 `FREEMUSIC_GITHUB_REPOSITORY=owner/repo RELEASE=1 bash android/scripts/build-apk.sh`，输出到 `release/`。使用自有签名时，在本机 `.signing/release.properties` 配置 `storeFile`、`storePassword`、`keyAlias` 和 `keyPassword`。
-
-每次发布更新 `uniapp/manifest.json` 的版本名和版本号，在 GitHub Releases 创建与版本名对应的标签（如 `v1.0.0`），上传三个 APK。应用通过「设置 → 检查应用更新」查询正式版本，只提供与当前安装包架构一致的下载。
 
 ## 目录
 

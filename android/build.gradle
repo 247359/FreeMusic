@@ -43,8 +43,6 @@ ext.uniAppSdk = files([
         'uni-convert2AbsFullPath-release',
         'uni-network-release',
         'uni-arrayBufferToBase64-release',
-        'uni-getBackgroundAudioManager-release',
-        'uni-createInnerAudioContext-release',
         'uni-form-release',
         'uni-actionSheet-release',
         'uni-modal-release'
