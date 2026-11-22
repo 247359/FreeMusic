@@ -169,12 +169,16 @@ export function rateTrack(track) {
 	})
 }
 
-/** 用原生弹窗展示歌曲技术信息（格式/码率/大小等） */
+let songInfoRequestId = 0
+
+/** 展示歌曲技术信息（格式/码率/大小等） */
 export function showSongInfoModal(track) {
 	if (!track) return
+	const requestId = ++songInfoRequestId
 	api
 		.getSong(track.id)
 		.then((full) => {
+			if (requestId !== songInfoRequestId) return
 			const t = full || track
 			const e = t.extra || {}
 			const fmt = (e.suffix || '').toUpperCase() || '未知'
@@ -194,14 +198,15 @@ export function showSongInfoModal(track) {
 				'大小：' + size,
 				'播放次数：' + (e.playCount || 0)
 			]
-			uni.showModal({
-				title: t.name || '歌曲信息',
-				content: lines.join('\n'),
-				showCancel: false,
-				confirmText: '知道了'
+			uni.openDialogPage({
+				url: '/pages/song-info/song-info?title=' + encodeURIComponent(t.name || '歌曲信息') +
+					'&content=' + encodeURIComponent(lines.join('\n')),
+				fail: () => toast('无法打开歌曲信息')
 			})
 		})
-		.catch(() => toast('信息加载失败'))
+		.catch(() => {
+			if (requestId === songInfoRequestId) toast('信息加载失败')
+		})
 }
 
 export function playCollection(type, id, meta = {}) {

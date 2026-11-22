@@ -13,9 +13,12 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import java.util.concurrent.atomic.AtomicBoolean
 
 @UnstableApi
 object Media3Audio {
+    const val OPEN_PLAYER_ACTION = "freemusic.action.OPEN_PLAYER"
+    private val playerPageRequested = AtomicBoolean(false)
     private val main = Handler(Looper.getMainLooper())
     private lateinit var context: Context
     private var listener: ((String, Double, Double) -> Unit)? = null
@@ -24,6 +27,16 @@ object Media3Audio {
     private val commands = ArrayDeque<(MediaController) -> Unit>()
     private var rate = 1f
     private var ready = false
+
+    fun requestPlayerPage() {
+        playerPageRequested.set(true)
+    }
+
+    fun dispatchPlayerPageRequest() {
+        if (playerPageRequested.get()) listener?.invoke("openplayer", 0.0, 0.0)
+    }
+
+    fun takePlayerPageRequest(): Boolean = playerPageRequested.getAndSet(false)
 
     private val progress = object : Runnable {
         override fun run() {
@@ -74,9 +87,12 @@ object Media3Audio {
         }
     }
 
-    fun load(url: String, title: String, artist: String, artwork: String) = runWithController { player ->
+    fun load(url: String, title: String, artist: String, artwork: String, duration: Double) = runWithController { player ->
         ready = false
         val metadata = MediaMetadata.Builder().setTitle(title).setArtist(artist)
+        if (duration.isFinite() && duration > 0) {
+            metadata.setDurationMs((duration * 1000).toLong())
+        }
         if (artwork.isNotBlank()) {
             metadata.setArtworkUri(Uri.parse(artwork))
         } else {

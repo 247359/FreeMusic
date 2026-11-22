@@ -3,7 +3,7 @@
 		<view class="listen-card press" @click="listen">
 			<view class="listen-text">
 				<text class="listen-label">{{ current ? (player.playing ? '正在播放' : '继续播放') : '随机漫游' }}</text>
-				<text class="listen-title ellipsis">{{ current ? current.name : '从曲库随机开播' }}</text>
+				<text class="listen-title" :max-lines="1">{{ current ? current.name : '从曲库随机开播' }}</text>
 				<text class="listen-sub ellipsis">{{ listenSubtitle }}</text>
 			</view>
 			<view class="listen-art">
@@ -152,6 +152,8 @@ function playDaily(index) {
 	color: #e0e8ff;
 }
 .listen-title {
+	width: 100%;
+	text-overflow: ellipsis;
 	font-size: 22px;
 	font-weight: 600;
 	color: #ffffff;

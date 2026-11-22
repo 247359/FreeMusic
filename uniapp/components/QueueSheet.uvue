@@ -17,8 +17,8 @@
 					:class="{ current: i === player.index }"
 					@click="emit('play', i)"
 				>
-					<text class="name ellipsis" :class="{ 'current-name': i === player.index }">{{ t.name }}</text>
-					<text class="artist ellipsis">{{ t.artistName }}</text>
+					<text class="name" :class="{ 'current-name': i === player.index }" :max-lines="2">{{ t.name }}</text>
+					<text class="artist ellipsis" :max-lines="1">{{ t.artistName }}</text>
 					<view class="row-menu" @click.stop="editTrack(t, i)">
 						<AppIcon name="more" :size="19" :opacity="0.65" />
 					</view>
@@ -142,7 +142,9 @@ function editTrack(track, index) {
 .name {
 	flex: 1;
 	width: 0;
+	text-overflow: ellipsis;
 	font-size: 14px;
+	line-height: 18px;
 	font-weight: 400;
 	color: var(--text);
 	opacity: 0.88;

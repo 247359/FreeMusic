@@ -1,4 +1,5 @@
 import { onMedia3Event, loadMedia3, controlMedia3 } from '@/uni_modules/freemusic-media3'
+export { takeMedia3PlayerPageRequest } from '@/uni_modules/freemusic-media3'
 
 let media3Url = ''
 
@@ -20,7 +21,7 @@ export function playUrl(url, meta = {}, reuseAt = null) {
 		controlMedia3('play', 0)
 	} else {
 		media3Url = url
-		loadMedia3(url, meta.name || 'FreeMusic', meta.artist || '', meta.picUrl || '')
+		loadMedia3(url, meta.name || 'FreeMusic', meta.artist || '', meta.picUrl || '', Number(meta.duration) || 0)
 	}
 	return reused
 }

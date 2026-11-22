@@ -73,6 +73,7 @@ import {
 import { settings, player, appState, useTheme } from '../../common/store.js'
 import { openSearch, goSettings } from '../../common/actions.js'
 import { isConfigured } from '../../common/api.js'
+import { setPlayerPageReady } from '../../common/player.js'
 
 const tab = ref('home')
 const homeTab = ref(null)
@@ -111,7 +112,11 @@ onPageShow(() => {
 	}
 })
 
-onReady(refreshSafeArea)
+onReady(() => {
+	refreshSafeArea()
+	setPlayerPageReady(true)
+})
+onUnload(() => setPlayerPageReady(false))
 onResize(refreshSafeArea)
 
 function switchTab(key) {

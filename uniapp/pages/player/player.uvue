@@ -91,7 +91,14 @@
 
 			<!-- 歌曲信息 -->
 			<view class="track">
-				<text class="name ellipsis">{{ current && current.name }}</text>
+				<view id="player-title-window" class="title-window">
+					<view class="title-strip" :style="titleStripStyle">
+						<text id="player-title-text" class="name"
+							:style="titleWidth ? { width: titleWidth + 'px' } : {}">{{ trackTitle }}</text>
+						<text v-if="titleWidth" class="name"
+							:style="{ width: titleWidth + 'px', marginLeft: titleGap + 'px' }">{{ trackTitle }}</text>
+					</view>
+				</view>
 				<view class="artist-row">
 					<text class="artist ellipsis">{{ current && current.artistName }}</text>
 					<AppIcon
@@ -171,16 +178,16 @@
 		/>
 
 		<!-- 歌曲信息面板 -->
-		<view v-if="showInfo" class="info-mask" @click="showInfo = false">
+		<view v-if="showInfo" class="info-mask" @click="closeSongInfo">
 			<view class="info-card" :style="{ maxHeight: infoMaxH + 'px' }" @click.stop>
 				<view class="info-head">
 					<text class="info-title">歌曲信息</text>
-					<AppIcon name="x" :size="18" :opacity="0.5" @click="showInfo = false" />
+					<AppIcon name="x" :size="18" :opacity="0.5" @click="closeSongInfo" />
 				</view>
 				<view class="info-body">
 					<view class="info-row">
 						<text class="info-k">标题</text>
-						<text class="info-v">{{ infoDetail && infoDetail.name ? infoDetail.name : '-' }}</text>
+						<text class="info-v info-name" :max-lines="2">{{ infoDetail && infoDetail.name ? infoDetail.name : '-' }}</text>
 					</view>
 					<view class="info-row">
 						<text class="info-k">艺术家</text>
@@ -226,6 +233,7 @@ import CoverImage from '../../components/CoverImage.uvue'
 import QueueSheet from '../../components/QueueSheet.uvue'
 import { BOTTOM_BAR_HEIGHT, PLAYBACK_RATES, currentWindowHeight, refreshSafeArea, safeBottom, statusBarHeight, windowWidth, windowHeight } from '../../common/config.js'
 import { touchPoint } from '../../common/swipe.js'
+import { useTitleMarquee } from '../../common/title-marquee.js'
 import { player, settings, useTheme, isLiked, getRating, setLocalRating, syncRating } from '../../common/store.js'
 import {
 	currentTrack,
@@ -271,6 +279,7 @@ const showLyrics = ref(false)
 const showQueue = ref(false)
 const showInfo = ref(false)
 const infoDetail = ref(null)
+let songInfoRequestId = 0
 const rating = ref(0)
 const stars = [1, 2, 3, 4, 5]
 const infoMaxH = Math.round((windowHeight > 200 ? windowHeight : 667) * 0.72)
@@ -288,6 +297,10 @@ const themeClass = computed(() => useTheme().themeClass())
 const statusBar = computed(() => statusBarHeight())
 const bottomInset = computed(() => safeBottom() + 'px')
 const current = computed(() => currentTrack())
+const trackTitle = computed(() => (current.value?.name || '').replace(/[\r\n]+/g, ' '))
+const {
+	titleWidth, titleGap, titleStripStyle, refreshTitleMarquee, stopTitleMarquee, setTitleMarqueeVisible
+} = useTitleMarquee(trackTitle, '#player-title-window', '#player-title-text')
 const cover = computed(() => current.value ? current.value.picUrl : '')
 const liked = computed(() => current.value ? isLiked(current.value.id) : false)
 const displayTime = computed(() => dragging.value ? dragSec.value : player.currentTime)
@@ -391,6 +404,8 @@ const sleeveStyle = computed(() => ({
 }))
 
 watch(current, (track) => {
+	refreshTitleMarquee()
+	closeSongInfo()
 	if (lyricSeekTimer) clearTimeout(lyricSeekTimer)
 	lyricPreviewTime.value = -1
 	// 队列被清空后当前曲消失，自动退出播放页，避免停留在无内容的空壳页
@@ -400,7 +415,6 @@ watch(current, (track) => {
 	}
 	loadLyrics()
 	loadRating()
-	infoDetail.value = null
 })
 
 // 首次进入时加载歌词与评分（onPageShow 已负责无歌退出的场景）
@@ -415,14 +429,24 @@ onPageShow(() => {
 	}
 })
 
-onReady(refreshSafeArea)
+onReady(() => {
+	refreshSafeArea()
+	refreshTitleMarquee()
+})
 onShow(() => {
+	setTitleMarqueeVisible(true)
 	stopVolumeSync()
 	refreshMediaVolume()
 	if (mediaVolume.value >= 0) volumeTimer = setInterval(refreshMediaVolume, 300)
 })
-onHide(stopVolumeSync)
-onResize(refreshSafeArea)
+onHide(() => {
+	setTitleMarqueeVisible(false)
+	stopVolumeSync()
+})
+onResize(() => {
+	refreshSafeArea()
+	refreshTitleMarquee()
+})
 
 function stopVolumeSync() {
 	if (volumeTimer != null) clearInterval(volumeTimer)
@@ -430,6 +454,7 @@ function stopVolumeSync() {
 }
 
 onUnload(() => {
+	stopTitleMarquee()
 	stopVolumeSync()
 	if (lyricSeekTimer) clearTimeout(lyricSeekTimer)
 	if (dragging.value) endDrag()
@@ -539,13 +564,22 @@ function rate(n) {
 function showSongInfo() {
 	const track = currentTrack()
 	if (!track) return
+	const requestId = ++songInfoRequestId
 	infoDetail.value = track
 	showInfo.value = true
 	api.getSong(track.id)
 		.then((full) => {
-			if (full) infoDetail.value = full
+			if (requestId === songInfoRequestId && currentTrack()?.id === track.id && full) {
+				infoDetail.value = full
+			}
 		})
 		.catch(() => {})
+}
+
+function closeSongInfo() {
+	songInfoRequestId++
+	showInfo.value = false
+	infoDetail.value = null
 }
 
 function changeMode() {
@@ -965,7 +999,19 @@ function cancelProgress() {
 .track {
 	margin-top: 34px;
 }
+.title-window {
+	height: 28px;
+	overflow: hidden;
+}
+.title-strip {
+	flex-direction: row;
+	align-items: center;
+	transition-property: transform;
+	transition-timing-function: linear;
+}
 .name {
+	flex-shrink: 0;
+	white-space: nowrap;
 	font-size: 21px;
 	font-weight: 600;
 	color: var(--text);
@@ -1051,6 +1097,10 @@ function cancelProgress() {
 	color: var(--text);
 	opacity: 0.9;
 	text-align: right;
+}
+.info-name {
+	width: 0;
+	text-overflow: ellipsis;
 }
 .info-path {
 	font-size: 12px;

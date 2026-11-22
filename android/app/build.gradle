@@ -4,7 +4,8 @@ plugins {
     id 'io.dcloud.uts.auto-register'
 }
 
-def projectManifest = new groovy.json.JsonSlurper().parse(rootProject.file('../uniapp/manifest.json'))
+def manifestText = providers.fileContents(rootProject.layout.projectDirectory.file('../uniapp/manifest.json')).asText
+def projectManifest = new groovy.json.JsonSlurper().parseText(manifestText.get())
 def applicationPackage = projectManifest['app-android'].distribute.packageName
 def supportedAbis = projectManifest['app-android'].distribute.abiFilters
 def targetAbi = providers.gradleProperty('freemusic.abi').getOrElse('arm64-v8a')

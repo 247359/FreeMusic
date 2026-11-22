@@ -14,12 +14,28 @@ import {
 } from './store.js'
 import * as api from './api.js'
 import { PLAYBACK_RATES } from './config.js'
-import { initAudio, playUrl, pause, resume, stop, seek, setPlaybackRate } from './audio.js'
+import { initAudio, playUrl, pause, resume, stop, seek, setPlaybackRate, takeMedia3PlayerPageRequest } from './audio.js'
 import { toast } from './format.js'
 
 let playToken = 0
 let dragging = false
 let started = false
+let playerPageReady = false
+
+export function openPlayerPage() {
+	const pages = getCurrentPages()
+	if (!currentTrack() || pages[pages.length - 1]?.route === 'pages/player/player') return
+	uni.navigateTo({ url: '/pages/player/player', animationType: 'slide-in-bottom', animationDuration: 260 })
+}
+
+function openRequestedPlayerPage() {
+	if (playerPageReady && takeMedia3PlayerPageRequest()) openPlayerPage()
+}
+
+export function setPlayerPageReady(ready) {
+	playerPageReady = ready
+	if (ready) openRequestedPlayerPage()
+}
 /** 本会话是否已通过 playAt 真正加载过音频源。冷启动恢复队列后为 false，点播放需重新加载 */
 let sourceLoaded = false
 let sourceReady = false
@@ -151,6 +167,7 @@ export function initPlayerEngine() {
 		saveSettings()
 	}
 	initAudio({
+		openplayer: openRequestedPlayerPage,
 		play: () => {
 			player.playing = true
 		},
@@ -255,7 +272,8 @@ export function playAt(index, resumeAt = 0, alternate = false) {
 			const reused = playUrl(url, {
 				name: track.name,
 				artist: track.artistName,
-				picUrl: track.picUrl
+				picUrl: track.picUrl,
+				duration: player.duration
 			}, previouslyReady ? pendingSeek : null)
 			if (reused) {
 				sourceReady = true

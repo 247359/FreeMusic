@@ -11,6 +11,12 @@ FreeMusic 是一款连接自建 Navidrome 曲库的 Android 音乐播放器。�
 | 歌单与收藏 | 创建和管理 Navidrome 歌单，收藏、评分及批量加入歌单或待播队列。 |
 | 外观 | 支持浅色、深色和跟随系统主题。 |
 
+## 应用截图
+
+| 首页 | 发现页 | 播放页 · 封面 | 播放页 · 歌词 |
+| --- | --- | --- | --- |
+| <img src="screenshont/home.png" alt="首页" width="185"> | <img src="screenshont/discover.png" alt="发现页" width="185"> | <img src="screenshont/player-cover.png" alt="播放页封面" width="185"> | <img src="screenshont/player-lyrics.png" alt="播放页歌词" width="185"> |
+
 ## 安装与连接
 
 在 [GitHub Releases](https://github.com/247359/FreeMusic/releases) 下载对应设备架构的 APK。首次打开后，填写 Navidrome 服务地址和账号。还没有服务，可以在应用的「设置 → Navidrome 部署教程」查看、复制或分享 Compose 配置。
@@ -32,8 +38,6 @@ FreeMusic 是一款连接自建 Navidrome 曲库的 Android 音乐播放器。�
 | `arm64-v8a` | Android 真机验证了安装、连接、搜索和播放。 |
 | `armeabi-v7a` | 在支持 32 位应用的同一台真机验证了安装和播放。 |
 | `x86_64` | 模拟器验证了安装和播放，暂无实体设备测试。 |
-
-[DCloud 蒸汽模式不支持 32 位 x86](https://doc.dcloud.net.cn/uni-app-x/collocation/manifest-android.html)。
 
 ## 目录
 

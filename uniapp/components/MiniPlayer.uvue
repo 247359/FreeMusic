@@ -12,8 +12,16 @@
 			<CoverImage v-if="current.thumbUrl || current.picUrl" class="cover cover-img" :src="current.thumbUrl || current.picUrl" @click="open" />
 			<view v-else class="cover empty-cover" @click="open"><AppIcon name="music-note" color="primary" :size="18" /></view>
 			<view class="info" @click="open">
-				<text class="name ellipsis">{{ current.name }}</text>
-				<text class="artist ellipsis">{{ current.artistName }}</text>
+				<view v-if="props.withNav" id="mini-title-window" class="title-window">
+					<view class="title-strip" :style="titleStripStyle">
+						<text id="mini-title-text" class="name scrolling-name"
+							:style="titleWidth ? { width: titleWidth + 'px' } : {}">{{ trackTitle }}</text>
+						<text v-if="titleWidth" class="name scrolling-name"
+							:style="{ width: titleWidth + 'px', marginLeft: titleGap + 'px' }">{{ trackTitle }}</text>
+					</view>
+				</view>
+				<text v-else class="name static-name" :max-lines="2">{{ current.name }}</text>
+				<text class="artist ellipsis" :max-lines="1">{{ current.artistName }}</text>
 			</view>
 			<view class="act" @click="toggleLike">
 				<AppIcon
@@ -40,7 +48,8 @@ import CoverImage from './CoverImage.uvue'
 import QueueSheet from './QueueSheet.uvue'
 import { navBarHeight, safeBottom } from '../common/config.js'
 import { player, isLiked, themeState } from '../common/store.js'
-import { playAt, removeFromQueue, toggle, toggleLike } from '../common/player.js'
+import { openPlayerPage, playAt, removeFromQueue, toggle, toggleLike } from '../common/player.js'
+import { useTitleMarquee } from '../common/title-marquee.js'
 
 const props = defineProps({
 	/** 页面底部是否有 BottomNav */
@@ -49,6 +58,19 @@ const props = defineProps({
 
 const themeClass = computed(() => (themeState.isDark ? 'theme-dark' : 'theme-light'))
 const current = computed(() => player.queue[player.index] || null)
+const trackTitle = computed(() =>
+	props.withNav && player.visible ? (current.value?.name || '').replace(/[\r\n]+/g, ' ') : ''
+)
+const {
+	titleWidth, titleGap, titleStripStyle, refreshTitleMarquee, setTitleMarqueeVisible
+} = useTitleMarquee(trackTitle, '#mini-title-window', '#mini-title-text')
+
+watch([trackTitle, () => player.index], refreshTitleMarquee)
+onMounted(() => setTitleMarqueeVisible(true))
+onPageShow(() => setTitleMarqueeVisible(true))
+onPageHide(() => setTitleMarqueeVisible(false))
+onUnmounted(() => setTitleMarqueeVisible(false))
+
 const showQueue = ref(false)
 const liked = computed(() => (current.value ? isLiked(current.value.id) : false))
 const percent = computed(() => {
@@ -58,7 +80,7 @@ const percent = computed(() => {
 const bottomOffset = computed(() => (props.withNav ? navBarHeight() : safeBottom()))
 
 function open() {
-	uni.navigateTo({ url: '/pages/player/player', animationType: 'slide-in-bottom', animationDuration: 260 })
+	openPlayerPage()
 }
 
 function playQueued(index) {
@@ -127,6 +149,24 @@ function playQueued(index) {
 	opacity: 0.88;
 	color: var(--text);
 	line-height: 20px;
+}
+.static-name {
+	width: 100%;
+	text-overflow: ellipsis;
+}
+.title-window {
+	height: 20px;
+	overflow: hidden;
+}
+.title-strip {
+	flex-direction: row;
+	align-items: center;
+	transition-property: transform;
+	transition-timing-function: linear;
+}
+.scrolling-name {
+	flex-shrink: 0;
+	white-space: nowrap;
 }
 .artist {
 	font-size: 11px;

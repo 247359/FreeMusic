@@ -1,8 +1,25 @@
 <script setup>
 import { initApp, applyTheme, savePlaybackProgress } from './common/store.js'
-import { initPlayerEngine, refreshSleepTimer } from './common/player.js'
+import { initPlayerEngine, refreshSleepTimer, pausePlayback } from './common/player.js'
 import { isConfigured, fetchLikedIds } from './common/api.js'
 import { refreshSafeArea } from './common/config.js'
+
+// #ifdef APP-ANDROID
+const exitBackWindow = 2000
+let firstBackAt = 0
+
+onLastPageBackPress(() => {
+	const now = Date.now()
+	if (firstBackAt && now - firstBackAt < exitBackWindow) {
+		firstBackAt = 0
+		pausePlayback()
+		uni.exit()
+		return
+	}
+	firstBackAt = now
+	uni.showToast({ title: '再按一次关闭应用', icon: 'none' })
+})
+// #endif
 
 onLaunch(() => {
 	initApp()
@@ -19,6 +36,9 @@ onAppShow(() => {
 })
 
 onAppHide(() => {
+	// #ifdef APP-ANDROID
+	firstBackAt = 0
+	// #endif
 	savePlaybackProgress()
 })
 

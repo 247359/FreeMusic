@@ -9,6 +9,7 @@ import uts.sdk.modules.freemusicMediaVolume.UniUTSMethodRegister
 import uts.sdk.modules.freemusicComposeShare.UniUTSMethodRegister as ComposeShareRegister
 import uts.sdk.modules.freemusicRelease.UniUTSMethodRegister as ReleaseRegister
 import uts.sdk.modules.freemusicMedia3.UniUTSMethodRegister as Media3Register
+import uts.sdk.modules.freemusicMedia3.Media3Audio
 
 class FreeMusicApplication : UniApplication() {
     override fun onCreate() {
@@ -20,6 +21,7 @@ class FreeMusicApplication : UniApplication() {
         registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityResumed(activity: Activity) {
                 activity.volumeControlStream = AudioManager.STREAM_MUSIC
+                if (activity !is MainActivity) Media3Audio.dispatchPlayerPageRequest()
             }
 
             override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit

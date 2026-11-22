@@ -78,6 +78,13 @@
 			}
 		},
 		{
+			"path": "pages/song-info/song-info",
+			"style": {
+				"disableScroll": true,
+				"backgroundColor": "transparent"
+			}
+		},
+		{
 			"path": "pages/login/login",
 			"style": {
 				"navigationStyle": "custom",

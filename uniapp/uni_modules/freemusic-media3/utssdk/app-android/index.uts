@@ -10,10 +10,14 @@ export function onMedia3Event(listener: (event: string, position: number, durati
 	}
 }
 
-export function loadMedia3(url: string, title: string, artist: string, artwork: string): void {
-	Media3Audio.load(url, title, artist, artwork)
+export function loadMedia3(url: string, title: string, artist: string, artwork: string, duration: number): void {
+	Media3Audio.load(url, title, artist, artwork, duration.toDouble())
 }
 
 export function controlMedia3(command: string, value: number): void {
 	Media3Audio.control(command, value.toDouble())
+}
+
+export function takeMedia3PlayerPageRequest(): boolean {
+	return Media3Audio.takePlayerPageRequest()
 }

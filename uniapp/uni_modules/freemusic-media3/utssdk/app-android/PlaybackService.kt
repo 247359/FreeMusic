@@ -1,5 +1,6 @@
 package uts.sdk.modules.freemusicMedia3
 
+import android.app.PendingIntent
 import android.graphics.Bitmap
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -37,6 +38,21 @@ class PlaybackService : MediaSessionService() {
             .build()
         // The application owns the queue. Lock-screen and headset actions use it too.
         val sessionPlayer = object : ForwardingPlayer(player) {
+            private fun libraryDuration(): Long? = player.currentMediaItem?.mediaMetadata?.durationMs
+
+            override fun getDuration(): Long {
+                val duration = super.getDuration()
+                return if (duration == C.TIME_UNSET) libraryDuration() ?: duration else duration
+            }
+
+            override fun getContentDuration(): Long {
+                val duration = super.getContentDuration()
+                return if (duration == C.TIME_UNSET) libraryDuration() ?: duration else duration
+            }
+
+            // A finite library track can be reported as live when its HTTP stream has no length.
+            override fun isCurrentMediaItemLive() = super.isCurrentMediaItemLive() && libraryDuration() == null
+
             override fun getAvailableCommands(): Player.Commands =
                 super.getAvailableCommands().buildUpon()
                     .addAll(
@@ -60,9 +76,14 @@ class PlaybackService : MediaSessionService() {
                 )
             }
         }
-        session = MediaSession.Builder(this, sessionPlayer)
-            .setBitmapLoader(artworkLoader)
-            .build()
+        val sessionBuilder = MediaSession.Builder(this, sessionPlayer).setBitmapLoader(artworkLoader)
+        packageManager.getLaunchIntentForPackage(packageName)?.let { launchIntent ->
+            launchIntent.action = Media3Audio.OPEN_PLAYER_ACTION
+            sessionBuilder.setSessionActivity(
+                PendingIntent.getActivity(this, 0, launchIntent, PendingIntent.FLAG_IMMUTABLE)
+            )
+        }
+        session = sessionBuilder.build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession = session
