@@ -29,6 +29,7 @@ let consecutiveErrors = 0
 let saveTimer = null
 /** 失败跳曲的延时任务；用户主动切歌时需清除，避免旧回调覆盖新曲 */
 let errorJumpTimer = null
+let endedAdvanceTimer = null
 /** 冷启动续播：src 设置后需等 canplay 才能 seek，暂存目标秒数 */
 let pendingSeek = 0
 let seekPreviewUntil = 0
@@ -41,6 +42,41 @@ function cancelErrorJump() {
 		clearTimeout(errorJumpTimer)
 		errorJumpTimer = null
 	}
+}
+
+function cancelEndedAdvance() {
+	if (endedAdvanceTimer == null) return
+	clearTimeout(endedAdvanceTimer)
+	endedAdvanceTimer = null
+}
+
+function stopAtEnd() {
+	playToken++
+	sourceLoaded = false
+	sourceReady = false
+	pendingSeek = 0
+	seekPreviewUntil = 0
+	player.playing = false
+	player.currentTime = 0
+	stop()
+	savePlayerState()
+}
+
+function onTrackEnded() {
+	if (!sourceLoaded || endedAdvanceTimer != null) return
+	const token = playToken
+	// Let the native player finish its own end-of-track reset before starting another track.
+	endedAdvanceTimer = setTimeout(() => {
+		endedAdvanceTimer = null
+		if (token !== playToken) return
+		if (player.sleepAtEnd) {
+			player.sleepAtEnd = false
+			stopAtEnd()
+			toast('定时停止：本曲已播完')
+			return
+		}
+		next(true)
+	}, 0)
 }
 
 /** 节流落盘，避免 progress 每次 timeupdate 都写存储 */
@@ -125,15 +161,7 @@ export function initPlayerEngine() {
 		stop: () => {
 			player.playing = false
 		},
-		ended: () => {
-			if (player.sleepAtEnd) {
-				player.sleepAtEnd = false
-				pausePlayback()
-				toast('定时停止：本曲已播完')
-				return
-			}
-			next(true)
-		},
+		ended: onTrackEnded,
 		next: () => next(false),
 		prev: () => prev(),
 		timeupdate: (data) => {
@@ -192,6 +220,7 @@ export function playAt(index, resumeAt = 0, alternate = false) {
 	const track = player.queue[index]
 	if (!track) return
 	cancelErrorJump()
+	cancelEndedAdvance()
 	const token = ++playToken
 	const resume = Number(resumeAt) > 0 ? Number(resumeAt) : 0
 	const previouslyReady = sourceLoaded && sourceReady
@@ -243,6 +272,7 @@ export function toggle() {
 	const track = currentTrack()
 	if (!track) return
 	if (player.playing) {
+		cancelEndedAdvance()
 		pause()
 		player.playing = false
 		savePlayerState()
@@ -260,6 +290,7 @@ export function toggle() {
 }
 
 export function pausePlayback() {
+	cancelEndedAdvance()
 	pause()
 	player.playing = false
 	savePlayerState()
@@ -269,16 +300,14 @@ export function next(auto = false) {
 	const list = player.queue
 	if (!list.length) return
 
-	if (player.isFM) {
+	if (player.isFM && (!auto || player.mode === 'shuffle')) {
 		if (player.index + 1 < list.length) playAt(player.index + 1)
 		else loadMoreFM()
 		return
 	}
 
 	if (player.mode === 'one' && auto) {
-		seek(0)
-		resume()
-		player.playing = true
+		playAt(player.index)
 		return
 	}
 
@@ -298,10 +327,7 @@ export function next(auto = false) {
 	} else if (!auto) {
 		ni = 0
 	} else {
-		player.playing = false
-		stop()
-		sourceLoaded = false
-		savePlayerState()
+		stopAtEnd()
 		return
 	}
 	playAt(ni)
@@ -526,6 +552,7 @@ export function removeFromQueue(index) {
 	if (!player.queue.length) {
 		playToken++
 		cancelErrorJump()
+		cancelEndedAdvance()
 		clearSleepTimer()
 		if (saveTimer) {
 			clearTimeout(saveTimer)
